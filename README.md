@@ -1,4 +1,4 @@
-# silly-biscuits
+# Silly Biscuits
 Silly Biscuits is a strategy card game that can be played by two or more people. 
 
 ## Running the code
