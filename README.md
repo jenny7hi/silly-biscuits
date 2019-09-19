@@ -55,7 +55,7 @@ As a high-level overview:
 - Print the current game setup and status.
 - `Game.has_plays()` checks that the player has a card that can be legally played. 
   - If so, `Game.parse_play()` accepts text input from the user and parses it.
-  - ‘Player.can_play()` checks that the user input is a card that the user has and can play.
+  - `Player.can_play()` checks that the user input is a card that the user has and can play.
     - If so, `Game.is_legal_play()` checks that the card can be legally played. If so:
       - Update status and message properties of `Game`
       - Update appropriate card lists for `Player`
