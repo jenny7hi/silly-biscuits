@@ -35,7 +35,7 @@ On running the program, you will see a short summary of the rules and commands a
 - `[n] from hidden` (e.g. `2 from hidden`): plays the nth hidden reserved card
 - `skip`: skips the current player and moves on to the next player
 ### Demo
-A demo of the program can be seen [here](https://youtu.be/Gajq69V3ZaU).
+A demo of the program can be seen [here](https://youtu.be/JeurUTPCWco).
 
 ## Program design
 ### Structure
