@@ -38,4 +38,5 @@ class Card:
 		print(tabs + face, end = '')
 		print(tabs + bottom, end = '\t')
 
+# empty card
 NONE_CARD = Card(0, True, True)

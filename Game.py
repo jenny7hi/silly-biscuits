@@ -18,15 +18,17 @@ class Game:
 		self.curr_player = 0
 		self.is_going_up = self.active[0].value != 2
 		self.winner = None
-		self.no_plays = 0
 
 		# messages
 		self.player_message = 'Player 1\'s turn.'
 		self.message = 'Play a card.'
 
+	"""
+	Gameplay
+	"""
+
 	# play game
 	def start(self):
-		self.print()
 		self.play()
 
 	# shuffles and distributes cards among players and decks
@@ -53,6 +55,7 @@ class Game:
 	# prompts user for input and processes it
 	def play(self):
 		while True:
+			self.print()
 			player = self.players[self.curr_player]
 			if self.has_plays(player):
 
@@ -63,7 +66,9 @@ class Game:
 
 				# multiplayer
 				else:
+					# parse command
 					face, _from = self.parse_play()
+					# get card referred to from command if player has card
 					card, message = player.can_play(face, _from, len(self.deck))
 				if card:
 					if self.is_legal_play(card):
@@ -78,6 +83,8 @@ class Game:
 							self.message = 'Play a card.'
 						if card.value != 10:
 							self.next_player()
+					# played a hidden card, but play was not legal
+					# make card public
 					elif _from == 'hidden':
 						to_public = card
 						card.played = False
@@ -89,6 +96,7 @@ class Game:
 						self.message = 'That\'s not a legal play. Play another card.'
 				else:
 					self.message = message
+			# no possible moves
 			else:
 				if self.deck:
 					player.draw(self.deck.pop())
@@ -97,9 +105,9 @@ class Game:
 					self.next_player()
 					self.end_game('win')
 					return
-			self.print()
 		self.end_game('draw')
 
+	# checks if player has a card that can be legally played
 	def has_plays(self, player):
 		playable_cards = player.hand if self.deck else player.hand + player.public
 		for card in playable_cards:
@@ -110,6 +118,7 @@ class Game:
 				return True
 		return False
 
+	# parses play command
 	def parse_play(self):
 		play = input().lower()
 		if play == 'skip':
@@ -131,6 +140,7 @@ class Game:
 			self.message = 'Not a valid play. Play another card.'
 		return face, _from
 
+	# checks if play is legal
 	def is_legal_play(self, card):
 		prev = self.active[-1]
 		value = card.value
@@ -148,6 +158,7 @@ class Game:
 			return prev.face != 'A'
 		return value > prev.value if self.is_going_up else value < prev.value
 
+	# updates status of game for a move
 	def make_play(self, card, _from, player):
 		if card.face == 'A':
 			card.value = 14 if self.is_going_up else 1
@@ -177,6 +188,10 @@ class Game:
 		elif status == 'win':
 			print('GAME OVER. \nPlayer %s won!' % (self.curr_player + 1))
 
+	"""
+	Computer player for singleplayer mode
+	"""
+
 	# naive computer player logic for singleplayer game
 	def naive_computer_player(self):
 		player = self.players[1]
@@ -191,6 +206,10 @@ class Game:
 			for card in player.hidden:
 				if self.is_legal_play(card) and player.can_play(card.face, 'hidden', len_deck):
 					return card, 'Computer played a %s. Your turn.'% card.face
+
+	"""
+	Printing UI
+	"""
 
 	# print game screen
 	def print(self):

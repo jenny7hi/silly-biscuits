@@ -32,6 +32,10 @@ class Player:
 			card.played = False
 		self.is_winner = False
 
+	"""
+	Checking and making plays
+	"""
+
 	# makes sure that specified card can be played based on the following:
 	# 1) player has the card
 	# 2) player has the card in a deck that they can access
@@ -108,6 +112,10 @@ class Player:
 				else:
 					reserved.append(NONE_CARD)
 		return reserved
+
+	"""
+	Printing UI
+	"""
 
 	# prints reserved and hand
 	def print(self):
