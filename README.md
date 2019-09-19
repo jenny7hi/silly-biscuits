@@ -53,7 +53,7 @@ As a high-level overview:
 ### Logic
 `Game.start()` starts an indefinite loop until there is a winner or a draw. On each iteration:
 - Print the current game setup and status.
-- ‘Game.has_plays()` checks that the player has a card that can be legally played. 
+- `Game.has_plays()` checks that the player has a card that can be legally played. 
   - If so, `Game.parse_play()` accepts text input from the user and parses it.
   - ‘Player.can_play()` checks that the user input is a card that the user has and can play.
     - If so, `Game.is_legal_play()` checks that the card can be legally played. If so:
