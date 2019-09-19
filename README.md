@@ -34,6 +34,7 @@ On running the program, you will see a short summary of the rules and commands a
 - `[card] from public` (e.g. `4 from public`): play the specified public reserved card
 - `[n] from hidden` (e.g. `2 from hidden`): plays the nth hidden reserved card
 - `skip`: skips the current player and moves on to the next player
+
 A demo of the program can be seen [here](https://youtu.be/Gajq69V3ZaU).
 
 ## Program design
