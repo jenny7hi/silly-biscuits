@@ -4,7 +4,7 @@ Silly Biscuits is a strategy card game that can be played by two or more people.
 ## Running the code
 1. Clone or download [this repository](https://github.com/jenny7hi/silly-biscuits.git).
 2.	In terminal, navigate to location of repository.
-3.	Run `silly_biscuits.py`
+3.	Run `python silly_biscuits.py`
 
 ## Game rules
 ### Setup
