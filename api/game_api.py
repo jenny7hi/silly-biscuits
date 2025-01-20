@@ -12,7 +12,7 @@ class GameCreate(BaseModel):
 
 class PlayMove(BaseModel):
     card: str
-    location: str = Field(..., regex='^(hand|public|hidden)$')
+    location: str = Field(..., pattern='^(hand|public|hidden)$')
 
 @app.post("/games/", response_model=GameInfo)
 def create_game(game_data: GameCreate):
