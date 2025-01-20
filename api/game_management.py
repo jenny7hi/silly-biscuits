@@ -1,10 +1,33 @@
 from api.card import Card, VALUE_TO_FACE, SPECIAL_CARDS
 from api.player import Player
+from pydantic import BaseModel
+from typing import List
 import math
 import random
+import pickle
+import os
+import base64
+from pathlib import Path
+
+class GameInfo(BaseModel):
+    game_code: str
+    num_players: int
+    current_player: int
+    cards_remaining: int
+
+class GameState(GameInfo):
+    current_card: str
+    direction: str
+    hand: List[str]
+    public_cards: List[str]
+    hidden_count: int
+    message: str
 
 class Game:
 	def __init__(self, num_players):
+		# Create saves directory in current working directory
+		self.save_dir = Path('saves')
+		self.save_dir.mkdir(exist_ok=True)
 
 		# setup cards and players
 		self.players = []
@@ -251,3 +274,73 @@ class Game:
 		print('A: biggest or smallest\t2: reverses direction\t8: next player plays any card\t10: current player plays any card')
 		print('\n-HIDDEN CARDS-')
 		print("Players do not know hidden cards before playing. If played and not legal, card is made public and turn is lost.\n")
+
+	"""
+	Game saving/loading functionality
+	"""
+
+	def save_game(self):
+		"""Saves the current game state and returns a game code"""
+		filename = f"game_{self.num_players}p_{id(self)}.sav"
+		save_path = self.save_dir / filename
+		
+		with open(save_path, 'wb') as f:
+			pickle.dump(self, f)
+			
+		return base64.urlsafe_b64encode(filename.encode()).decode()
+
+	@classmethod
+	def load_game(cls, game_code):
+		"""Loads a game from a game code"""
+		try:
+			filename = base64.urlsafe_b64decode(game_code.encode()).decode()
+			save_path = Path('saves') / filename
+			
+			with open(save_path, 'rb') as f:
+				return pickle.load(f)
+		except (ValueError, FileNotFoundError):
+			return None
+
+	def cleanup_old_saves(self, max_saves=10):
+		"""Removes old save files, keeping only the most recent ones"""
+		saves = list(self.save_dir.glob('game_*.sav'))
+		saves.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+		
+		for save in saves[max_saves:]:
+			save.unlink()
+
+	def to_info(self, game_code: str = None) -> GameInfo:
+		"""Convert game instance to GameInfo object"""
+		if not game_code:
+			game_code = base64.urlsafe_b64encode(
+				f"game_{self.num_players}p_{id(self)}.sav".encode()
+			).decode()
+			
+		return GameInfo(
+			game_code=game_code,
+			num_players=self.num_players,
+			current_player=self.curr_player + 1,
+			cards_remaining=len(self.deck)
+		)
+
+	def to_state(self, game_code: str = None) -> GameState:
+		"""Convert game instance to GameState object with detailed info"""
+		player = self.players[self.curr_player]
+		
+		if not game_code:
+			game_code = base64.urlsafe_b64encode(
+				f"game_{self.num_players}p_{id(self)}.sav".encode()
+			).decode()
+			
+		return GameState(
+			game_code=game_code,
+			num_players=self.num_players,
+			current_player=self.curr_player + 1,
+			cards_remaining=len(self.deck),
+			current_card=self.active[-1].face if self.active else None,
+			direction="up" if self.is_going_up else "down",
+			hand=[card.face for card in player.hand],
+			public_cards=[card.face for card in player.public],
+			hidden_count=sum(1 for card in player.hidden if not card.played),
+			message=self.message
+		)
