@@ -1,4 +1,4 @@
-from Card import NONE_CARD, SPECIAL_CARDS
+from api.card import NONE_CARD, SPECIAL_CARDS
 
 # tab offset for printing cards
 TABS = {

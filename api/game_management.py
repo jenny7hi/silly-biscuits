@@ -1,5 +1,5 @@
-from Card import Card, VALUE_TO_FACE, SPECIAL_CARDS
-from Player import Player
+from api.card import Card, VALUE_TO_FACE, SPECIAL_CARDS
+from api.player import Player
 import math
 import random
 
@@ -54,6 +54,9 @@ class Game:
 
 	# prompts user for input and processes it
 	def play(self):
+
+		# CORE GAME LOOP
+		
 		while True:
 			self.print()
 			player = self.players[self.curr_player]

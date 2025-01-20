@@ -1,4 +1,4 @@
-from Game import Game
+from api.game_management import Game
 import os
 
 def silly_biscuits():
