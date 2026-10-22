@@ -66,8 +66,8 @@ function sourceKey(source: Source) {
 export default function App() {
   const [game, setGame] = useState<GameState>(() => newGame())
   const [difficulty, setDifficulty] = useState<Difficulty>(() => savedDifficulty() ?? 'medium')
-  // the first time the game is opened, ask which biscuit to play against
-  const [dialog, setDialog] = useState<Dialog>(() => (savedDifficulty() ? null : 'difficulty'))
+  // every game starts by asking which biscuit to play against, including the first
+  const [dialog, setDialog] = useState<Dialog>('difficulty')
   const [celebrating, setCelebrating] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
   // the cards flying out of an exploding pile, and how big the discard was before
@@ -86,29 +86,34 @@ export default function App() {
     setCelebrating(false)
   }, [])
 
+  // a new game always begins with the biscuit picker; the deal happens once one is chosen
+  const askForNewGame = useCallback(() => {
+    setCelebrating(false)
+    setDialog('difficulty')
+  }, [])
+
   const chooseDifficulty = (d: Difficulty) => {
     rememberDifficulty(d)
-    setDialog(null)
-    if (d === difficulty) return
     setDifficulty(d)
     deal()
   }
 
-  // closing the biscuit picker keeps the current one, and stops it popping up next time
+  // cancelling keeps the game in progress, or deals a fresh one if that game is over
   const closeDifficulty = useCallback(() => {
     rememberDifficulty(difficulty)
-    setDialog(null)
-  }, [difficulty])
+    if (game.winner !== null) deal()
+    else setDialog(null)
+  }, [difficulty, game.winner, deal])
 
   const humanTurn = game.winner === null && game.current === HUMAN
   const humanStuck = humanTurn && !hasPlays(game, HUMAN)
 
-  // computer turns, waiting for a pickup animation to finish first
+  // computer turns, waiting for a pickup animation to finish, and for any dialog to close
   useEffect(() => {
-    if (game.winner !== null || !game.players[game.current].isComputer || swoosh) return
+    if (game.winner !== null || !game.players[game.current].isComputer || swoosh || dialog) return
     const timer = setTimeout(() => setGame((g) => computerTurn(g, difficulty)), COMPUTER_DELAY)
     return () => clearTimeout(timer)
-  }, [game, swoosh, difficulty])
+  }, [game, swoosh, difficulty, dialog])
 
   // someone had to pick up the pile: swoosh it into their hand. This measures where the
   // pile, the hand and the flipped hidden card sit on the table, before the browser paints.
@@ -266,12 +271,12 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'F2') {
         e.preventDefault()
-        deal()
+        askForNewGame()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [deal])
+  }, [askForNewGame])
 
   const attempt = (source: Source) => {
     if (!humanTurn) return
@@ -312,12 +317,12 @@ export default function App() {
             {
               label: 'Game',
               items: [
-                { label: 'Deal', shortcut: 'F2', onSelect: deal },
+                { label: 'Deal', shortcut: 'F2', onSelect: askForNewGame },
                 { label: '', separator: true },
                 {
                   label: 'Difficulty…',
                   detail: <BiscuitName difficulty={difficulty} />,
-                  onSelect: () => setDialog('difficulty'),
+                  onSelect: askForNewGame,
                 },
                 { label: '', separator: true },
                 { label: 'Rules…', onSelect: () => setDialog('rules') },
@@ -459,8 +464,8 @@ export default function App() {
             you draw back up to five cards while the deck lasts. Press F2 to deal a new game.
           </p>
           <p>
-            Choose how well the computer plays from Game, Difficulty: Soggy is easy, Crumbly is in between, and
-            Crunchy is hard.
+            Every new game starts by asking which biscuit you're up against: Soggy is easy, Crumbly is in between,
+            and Crunchy is hard.
           </p>
         </MessageBox>
       )}
@@ -481,7 +486,7 @@ export default function App() {
           icon="question"
           onClose={() => setDialog(null)}
           buttons={[
-            { label: 'Yes', onClick: deal },
+            { label: 'Yes', onClick: askForNewGame },
             { label: 'No', onClick: () => setDialog(null) },
           ]}
         >

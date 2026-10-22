@@ -43,7 +43,7 @@ export function BiscuitName({ difficulty, inline = false }: { difficulty: Diffic
 
 const MOODS: Record<Difficulty, BiscuitMood> = { easy: 'soggy', medium: 'crumbly', hard: 'crunchy' }
 
-// Game > Difficulty… : pick a biscuit. The first time the game is opened this comes up on its own.
+// pick a biscuit: this opens at the start of every new game (launch, Deal, F2, Game > Difficulty…)
 export function DifficultyDialog({
   current,
   onChoose,
