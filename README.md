@@ -18,6 +18,7 @@ To publish it as one self-contained page (for example, to encrypt it with StatiC
 
 The browser version differs from the terminal version in two ways:
 - If you can't play, you pick up the whole pile (click it) and lose your turn, instead of drawing a card. Being stuck never ends the game: you win by playing all your cards.
+- If a hidden card you flip can't be played, you pick it up along with the whole pile, instead of it being turned face up.
 - A 10 blows the pile up (轰！) into a discard pile, taking those cards out of the game.
 
 ## Game rules

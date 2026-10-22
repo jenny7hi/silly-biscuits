@@ -196,11 +196,13 @@ export function play(state: GameState, source: Source): GameState {
     if (source.from !== 'hidden') {
       return { ...s, error: `${cardLabel(card)} can't be played. ${requirement(s)}.` }
     }
-    // a hidden card that turns out to be illegal is made public and the turn is lost
-    const slot = p.slots[source.slot]
-    slot.hidden = null
-    slot.public = card
-    s.message = `${p.name} turned over a hidden ${cardLabel(card)}, but it can't be played. Turn lost.`
+    // a hidden card that turns out to be illegal goes into the hand along with the whole pile
+    p.slots[source.slot].hidden = null
+    const count = s.pile.length
+    p.hand.push(card, ...s.pile.map(({ id, rank, suit }) => ({ id, rank, suit })))
+    p.hand.sort(byRank)
+    s.pile = []
+    s.message = `${p.name} turned over a hidden ${cardLabel(card)}, but it can't be played, so ${p.name === 'You' ? 'you pick' : `${p.name} picks`} it up with ${count === 1 ? 'the card' : `all ${count} cards`} on the pile.`
     advance(s)
     return s
   }

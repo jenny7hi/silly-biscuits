@@ -239,8 +239,8 @@ export default function App() {
           </p>
           <p>
             <b>Reserved cards</b> unlock once the deck is empty. Hidden cards unlock when the card on top is gone, and you
-            don't know what they are until you play them. If a hidden card can't be played, it's turned face up and you
-            lose your turn.
+            don't know what they are until you play them. If a hidden card can't be played, you pick it up along with the
+            pile.
           </p>
           <p>
             If you can't play, click the pile to pick it all up, and you lose your turn. After each play you draw back up to

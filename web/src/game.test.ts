@@ -116,13 +116,16 @@ describe('play', () => {
     expect(play(g, { from: 'public', slot: 0 }).error).toMatch(/deck is empty/)
   })
 
-  it('turns an illegal hidden card face up and ends the turn', () => {
-    const g = withPile([onPile(12)])
+  it('picks up an illegal hidden card along with the pile and ends the turn', () => {
+    const g = withPile([onPile(9), onPile(12)])
     const hidden = card(4)
     g.deck = []
+    g.players[0].hand = []
     g.players[0].slots[0] = { public: null, hidden }
     const next = play(g, { from: 'hidden', slot: 0 })
-    expect(next.players[0].slots[0]).toEqual({ public: hidden, hidden: null })
+    expect(next.players[0].slots[0]).toEqual({ public: null, hidden: null })
+    expect(next.players[0].hand.map((c) => c.rank)).toEqual([4, 9, 12])
+    expect(next.pile).toEqual([])
     expect(next.current).toBe(1)
   })
 
