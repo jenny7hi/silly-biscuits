@@ -2,6 +2,7 @@ import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, us
 import { DIFFICULTIES, type Difficulty, computerTurn } from './ai'
 import { CardView, EmptySpot } from './CardView'
 import {
+  type Card,
   type GameState,
   type PileCard,
   type Player,
@@ -107,10 +108,9 @@ export default function App() {
     seenPickup.current = pickup.id
     const felt = feltRef.current
     if (!felt) return
-    const origin = felt.getBoundingClientRect()
-    const at = (selector: string): Point | null => {
-      const rect = felt.querySelector(selector)?.getBoundingClientRect()
-      return rect ? { x: rect.left - origin.left, y: rect.top - origin.top } : null
+    const at = (selector: string) => {
+      const el = felt.querySelector<HTMLElement>(selector)
+      return el ? feltPosition(felt, el) : null
     }
     const flipped = pickup.flipped
     const cards = pickup.cards.slice(-4)
@@ -118,9 +118,10 @@ export default function App() {
       id: pickup.id,
       cards,
       pile: at('.pile')!,
-      hand: handTarget(felt, pickup.player),
+      targets: cardTargets(felt, [...cards, ...(flipped ? [flipped] : [])]),
       flipped,
       flippedAt: flipped ? at(`[data-seat="${pickup.player}"][data-slot="${pickup.slot}"]`) : null,
+      intoHiddenHand: game.players[pickup.player].isComputer,
       duration: prefersReducedMotion() ? 900 : swooshDuration(cards.length + (flipped ? 1 : 0), flipped !== null),
       hiddenIds: new Set([...pickup.cards, ...(flipped ? [flipped] : [])].map((c) => c.id)),
       player: pickup.player,
@@ -129,7 +130,7 @@ export default function App() {
 
   useEffect(() => {
     if (!swoosh) return
-    const timer = setTimeout(() => setSwoosh(null), swoosh.duration)
+    const timer = setTimeout(() => setSwoosh(null), swoosh.duration + 30)
     return () => clearTimeout(timer)
   }, [swoosh])
 
@@ -141,14 +142,12 @@ export default function App() {
     seenDraw.current = draw.id
     const felt = feltRef.current
     if (!felt || prefersReducedMotion()) return
-    const origin = felt.getBoundingClientRect()
-    const deckRect = felt.querySelector('[data-deck]')!.getBoundingClientRect()
     setDrawing({
       id: draw.id,
       player: draw.player,
       cards: draw.cards,
-      deck: { x: deckRect.left - origin.left, y: deckRect.top - origin.top },
-      hand: handTarget(felt, draw.player),
+      deck: feltPosition(felt, felt.querySelector<HTMLElement>('[data-deck]')!),
+      targets: cardTargets(felt, draw.cards),
       reveal: draw.player === HUMAN,
       duration: dealDuration(draw.cards.length),
       hiddenIds: new Set(draw.cards.map((c) => c.id)),
@@ -157,7 +156,7 @@ export default function App() {
 
   useEffect(() => {
     if (!drawing) return
-    const timer = setTimeout(() => setDrawing(null), drawing.duration)
+    const timer = setTimeout(() => setDrawing(null), drawing.duration + 30)
     return () => clearTimeout(timer)
   }, [drawing])
 
@@ -171,38 +170,51 @@ export default function App() {
     seenPlay.current = played.id
     const felt = feltRef.current
     if (!felt || prefersReducedMotion()) return
-    const origin = felt.getBoundingClientRect()
     let from = cardPositions.current.get(played.card.id) ?? null
     if (played.from === 'hidden') {
-      const slot = felt.querySelector(`[data-seat="${played.player}"][data-slot="${played.slot}"]`)?.getBoundingClientRect()
-      from = slot ? { x: slot.left - origin.left, y: slot.top - origin.top } : null
+      const slot = felt.querySelector<HTMLElement>(`[data-seat="${played.player}"][data-slot="${played.slot}"]`)
+      from = slot ? feltPosition(felt, slot) : null
     }
-    const pile = felt.querySelector('.pile')?.getBoundingClientRect()
-    if (!from || !pile) return
+    const pileEl = felt.querySelector<HTMLElement>('.pile')
+    if (!from || !pileEl) return
+    const pile = feltPosition(felt, pileEl)
     setFlight({
       id: played.id,
       card: played.card,
       from,
-      to: { x: pile.left - origin.left + (Math.min(played.pileSize, 4) - 1) * 16, y: pile.top - origin.top },
+      to: { x: pile.x + (Math.min(played.pileSize, 4) - 1) * 16, y: pile.y },
       faceDown: played.from === 'hidden' || (played.from === 'hand' && game.players[played.player].isComputer),
     })
   }, [game.lastPlay])
 
   useEffect(() => {
     if (!flight) return
-    const timer = setTimeout(() => setFlight(null), PLAY_FLIGHT)
+    const timer = setTimeout(() => setFlight(null), PLAY_FLIGHT + 30)
     return () => clearTimeout(timer)
   }, [flight])
 
-  // after every render, note where each card in a hand or reserved slot sits on the felt
+  // after every render, note where each card in a hand or reserved slot sits on the felt,
+  // and glide any hand card that moved (a card left, or room was made for new ones) from
+  // where it was to where it is now, instead of letting it snap
   useLayoutEffect(() => {
     const felt = feltRef.current
     if (!felt) return
-    const origin = felt.getBoundingClientRect()
+    const before = cardPositions.current
     const positions = new Map<number, Point>()
+    const glide = !prefersReducedMotion()
     felt.querySelectorAll<HTMLElement>('[data-card-id]').forEach((el) => {
-      const rect = el.getBoundingClientRect()
-      positions.set(Number(el.dataset.cardId), { x: rect.left - origin.left, y: rect.top - origin.top })
+      const id = Number(el.dataset.cardId)
+      const now = feltPosition(felt, el)
+      positions.set(id, now)
+      const was = before.get(id)
+      if (!glide || !was || !el.classList.contains('hand__slot')) return
+      const dx = was.x - now.x
+      const dy = was.y - now.y
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return
+      el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }], {
+        duration: 280,
+        easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
+      })
     })
     cardPositions.current = positions
   })
@@ -463,17 +475,27 @@ export default function App() {
   )
 }
 
-// where a card flying into a player's hand should land: the middle of the cards they hold,
-// relative to the felt
-function handTarget(felt: HTMLElement, player: number): Point {
-  const origin = felt.getBoundingClientRect()
-  const hand = felt.querySelector(player === HUMAN ? '.seat--you .hand' : '.seat--opponent .hand')!
-  const cardWidth = parseFloat(getComputedStyle(felt).getPropertyValue('--card-w')) || 71
-  const first = hand.firstElementChild?.getBoundingClientRect()
-  const last = hand.lastElementChild?.getBoundingClientRect()
-  const area = hand.getBoundingClientRect()
-  const centre = first && last ? (first.left + last.right) / 2 : area.left + area.width / 2
-  return { x: centre - cardWidth / 2 - origin.left, y: area.top + (area.height - cardWidth * 1.35) / 2 - origin.top }
+// where an element sits on the felt, from layout alone: unlike getBoundingClientRect this
+// ignores transforms, so cards mid-animation (or the felt mid-shake) don't throw it off
+function feltPosition(felt: HTMLElement, el: HTMLElement): Point {
+  let x = 0
+  let y = 0
+  for (let node: HTMLElement | null = el; node && node !== felt; node = node.offsetParent as HTMLElement | null) {
+    x += node.offsetLeft
+    y += node.offsetTop
+  }
+  return { x, y }
+}
+
+// where each of these cards sits in its hand. Cards on their way in keep an invisible place
+// there, so a flying card can land exactly on it.
+function cardTargets(felt: HTMLElement, cards: Card[]) {
+  const targets = new Map<number, Point>()
+  for (const card of cards) {
+    const el = felt.querySelector<HTMLElement>(`.hand__slot[data-card-id="${card.id}"]`)
+    if (el) targets.set(card.id, feltPosition(felt, el))
+  }
+  return targets
 }
 
 // the ids of cards still flying into a player's hand
@@ -489,18 +511,22 @@ interface SeatProps {
   reservedLocked?: boolean
   onPlay?: (source: Source) => void
   flash?: string | null
-  // cards still flying into this hand, kept out of it until they land
+  // cards still flying into this hand, kept invisible until they land
   incoming?: Set<number>
 }
 
 function Seat({ player, active, opponent, reservedLocked, onPlay, flash, incoming }: SeatProps) {
-  const handCards = incoming ? player.hand.filter((c) => !incoming.has(c.id)) : player.hand
   const hand = (
     <div className={`hand ${opponent ? 'hand--opponent' : ''}`} aria-label={`${player.name} hand`}>
-      {handCards.length === 0 && <EmptySpot />}
-      {/* each card sits in a slot that shrinks when the hand gets big, so the cards overlap more */}
-      {handCards.map((card) => (
-        <div className="hand__slot" key={card.id} data-card-id={card.id}>
+      {player.hand.length === 0 && <EmptySpot />}
+      {/* each card sits in a slot that shrinks when the hand gets big, so the cards overlap more.
+          A card still flying in keeps its slot, invisible, until it lands. */}
+      {player.hand.map((card) => (
+        <div
+          className={`hand__slot ${incoming?.has(card.id) ? 'hand__slot--incoming' : ''}`}
+          key={card.id}
+          data-card-id={card.id}
+        >
           {opponent ? (
             <CardView faceDown />
           ) : (
