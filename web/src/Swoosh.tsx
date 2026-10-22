@@ -22,17 +22,14 @@ export interface SwooshAnimation {
   hiddenIds: Set<number>
 }
 
-// All motion here is deliberately choppy, like a game from the Windows XP days: cards jump
-// between a handful of frames (about 14 a second) instead of easing smoothly, never fade,
-// and flip by squashing flat and springing back as the other side, with no 3D.
+// Cards flip the way they did in games from the Windows XP days, by squashing flat and
+// springing back as the other side, with no 3D. The motion itself is smooth.
 const FRAME = 70
-export const frames = (ms: number) => Math.max(2, Math.round(ms / FRAME))
 
 // an old-school card flip. `from: 'back'` turns a face-down card face up; `from: 'front'`
 // flips a face-up card over and back again, so it still lands face up.
 export function RetroFlip({ card, from, duration, delay }: { card: Card; from: 'back' | 'front'; duration: number; delay: number }) {
-  const half = frames(duration / 2)
-  const squash = `retro-squash ${duration}ms steps(${half}, jump-none) ${delay}ms both`
+  const squash = `retro-squash ${duration}ms ease-in-out ${delay}ms both`
   return (
     <div className="retro-flip" style={{ animation: squash }}>
       {from === 'back' ? (
@@ -64,7 +61,7 @@ export function swooshDuration(cardCount: number, flipped: boolean) {
 
 // `appearAt` keeps a card invisible until then (the failed hidden card waits for its reveal)
 function flying(card: Card, from: Point, to: Point, delay: number, key: string, appearAt?: number) {
-  const animations = [`swoosh ${SWOOSH}ms steps(${frames(SWOOSH)}, jump-end) ${delay}ms both`]
+  const animations = [`swoosh ${SWOOSH}ms cubic-bezier(0.55, 0, 0.8, 0.35) ${delay}ms both`]
   if (appearAt !== undefined) animations.push(`swoosh-appear 0s linear ${appearAt}ms both`)
   const style = {
     left: from.x,
@@ -150,7 +147,7 @@ export function Deal({ animation }: { animation: DealAnimation }) {
           top: deck.y,
           '--dx': `${hand.x - deck.x + i * 18}px`,
           '--dy': `${hand.y - deck.y}px`,
-          animation: `deal ${DEAL_FLIGHT}ms steps(${frames(DEAL_FLIGHT)}, jump-end) ${delay}ms both`,
+          animation: `deal ${DEAL_FLIGHT}ms cubic-bezier(0.25, 0.8, 0.35, 1) ${delay}ms both`,
         } as CSSProperties
         return (
           <div className="deal__card" style={style} key={card.id}>
@@ -181,8 +178,7 @@ export function PlayFlight({ animation }: { animation: PlayFlightAnimation }) {
     top: from.y,
     '--dx': `${to.x - from.x}px`,
     '--dy': `${to.y - from.y}px`,
-    // two legs (up, then down onto the pile), each a few frames
-    animation: `play-arc ${PLAY_FLIGHT}ms steps(${frames(PLAY_FLIGHT / 2)}, jump-end) both`,
+    animation: `play-arc ${PLAY_FLIGHT}ms ease-in-out both`,
   } as CSSProperties
   return (
     <div className="swoosh" aria-hidden="true">
