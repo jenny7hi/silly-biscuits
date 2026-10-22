@@ -34,6 +34,36 @@ export type Source =
   | { from: 'public'; slot: number }
   | { from: 'hidden'; slot: number }
 
+// the last time someone had to pick up the pile, so the UI can animate it
+export interface Pickup {
+  // increases with every pickup in a game
+  id: number
+  player: number
+  // the pile cards picked up, bottom first
+  cards: Card[]
+  // the hidden card that was flipped and couldn't be played, if that caused the pickup
+  flipped: Card | null
+  slot: number | null
+}
+
+// the last time someone drew from the deck after a play, so the UI can animate it
+// the last card played onto the pile, so the UI can animate it
+export interface LastPlay {
+  id: number
+  player: number
+  card: Card
+  from: Source['from']
+  slot: number | null
+  // how many cards were on the pile once it landed (a 10 then blows them away)
+  pileSize: number
+}
+
+export interface Draw {
+  id: number
+  player: number
+  cards: Card[]
+}
+
 export interface GameState {
   players: Player[]
   deck: Card[]
@@ -46,6 +76,9 @@ export interface GameState {
   // set when the last attempted play was rejected; the turn does not change
   error: string | null
   winner: number | null
+  pickup: Pickup | null
+  draw: Draw | null
+  lastPlay: LastPlay | null
 }
 
 export const HAND_SIZE = 5
@@ -117,6 +150,9 @@ export function newGame({
     message: `${seated[0].name === 'You' ? 'You go' : `${seated[0].name} goes`} first.`,
     error: null,
     winner: null,
+    pickup: null,
+    draw: null,
+    lastPlay: null,
   }
 }
 
@@ -190,6 +226,17 @@ export function cloneState(state: GameState): GameState {
 
 const playedVerb = (p: Player) => `${p.name} played`
 
+// moves the whole pile (and a failed hidden card, if any) into the current player's hand
+function pickUpPile(state: GameState, flipped: Card | null = null, slot: number | null = null) {
+  const p = state.players[state.current]
+  const cards = state.pile.map(({ id, rank, suit }) => ({ id, rank, suit }))
+  p.hand.push(...cards, ...(flipped ? [flipped] : []))
+  p.hand.sort(byRank)
+  state.pile = []
+  state.pickup = { id: (state.pickup?.id ?? 0) + 1, player: state.current, cards, flipped, slot }
+  return cards.length
+}
+
 function advance(state: GameState) {
   state.current = (state.current + 1) % state.players.length
 }
@@ -210,10 +257,7 @@ export function play(state: GameState, source: Source): GameState {
     }
     // a hidden card that turns out to be illegal goes into the hand along with the whole pile
     p.slots[source.slot].hidden = null
-    const count = s.pile.length
-    p.hand.push(card, ...s.pile.map(({ id, rank, suit }) => ({ id, rank, suit })))
-    p.hand.sort(byRank)
-    s.pile = []
+    const count = pickUpPile(s, card, source.slot)
     s.message = `${p.name} turned over a hidden ${cardLabel(card)}, but it can't be played, so ${p.name === 'You' ? 'you pick' : `${p.name} picks`} it up with ${count === 1 ? 'the card' : `all ${count} cards`} on the pile.`
     advance(s)
     return s
@@ -225,8 +269,21 @@ export function play(state: GameState, source: Source): GameState {
 
   const value = card.rank === 1 ? (s.goingUp ? 14 : 1) : card.rank
   s.pile.push({ ...card, value })
+  s.lastPlay = {
+    id: (s.lastPlay?.id ?? 0) + 1,
+    player: s.current,
+    card,
+    from: source.from,
+    slot: source.from === 'hand' ? null : source.slot,
+    pileSize: s.pile.length,
+  }
 
-  while (p.hand.length < HAND_SIZE && s.deck.length > 0) p.hand.push(s.deck.shift()!)
+  const drawn: Card[] = []
+  while (p.hand.length + drawn.length < HAND_SIZE && s.deck.length > 0) drawn.push(s.deck.shift()!)
+  if (drawn.length) {
+    p.hand.push(...drawn)
+    s.draw = { id: (s.draw?.id ?? 0) + 1, player: s.current, cards: drawn }
+  }
   p.hand.sort(byRank)
 
   const label = cardLabel(card)
@@ -262,10 +319,7 @@ export function noMove(state: GameState): GameState {
   const s = cloneState(state)
   s.error = null
   const p = s.players[s.current]
-  const count = s.pile.length
-  p.hand.push(...s.pile.map(({ id, rank, suit }) => ({ id, rank, suit })))
-  p.hand.sort(byRank)
-  s.pile = []
+  const count = pickUpPile(s)
   s.message = `${p.name} couldn't play and picked up ${count === 1 ? 'the card' : `all ${count} cards`} on the pile.`
   advance(s)
   return s

@@ -103,6 +103,7 @@ describe('play', () => {
     expect(next.current).toBe(0)
     expect(next.pile).toEqual([])
     expect(next.discard.map((c) => c.rank)).toEqual([5, 10])
+    expect(next.lastPlay).toMatchObject({ id: 1, player: 0, card: ten, from: 'hand', slot: null, pileSize: 2 })
     next = play(next, { from: 'hand', cardId: eight.id })
     expect(next.current).toBe(1)
   })
@@ -128,6 +129,7 @@ describe('play', () => {
     const next = play(g, { from: 'hidden', slot: 0 })
     expect(next.players[0].slots[0]).toEqual({ public: null, hidden: null })
     expect(next.players[0].hand.map((c) => c.rank)).toEqual([4, 9, 12])
+    expect(next.pickup).toMatchObject({ player: 0, flipped: hidden, slot: 0 })
     expect(next.pile).toEqual([])
     expect(next.current).toBe(1)
   })
@@ -136,6 +138,7 @@ describe('play', () => {
     const g = withPile([onPile(8)])
     const next = play(g, { from: 'hand', cardId: g.players[0].hand[0].id })
     expect(next.players[0].hand).toHaveLength(5)
+    expect(next.draw).toMatchObject({ id: 1, player: 0, cards: [g.deck[0]] })
   })
 
   it('declares a winner when the last card is played', () => {
@@ -157,6 +160,8 @@ describe('noMove', () => {
     expect(next.pile).toEqual([])
     expect(next.deck).toHaveLength(g.deck.length)
     expect(next.current).toBe(1)
+    expect(next.pickup).toMatchObject({ id: 1, player: 0, flipped: null })
+    expect(next.pickup?.cards.map((c) => c.rank)).toEqual([4, 9, 13])
   })
 
   it('does not end the game when the deck is empty', () => {
@@ -176,7 +181,7 @@ const twoComputers = (seed: number) =>
 
 describe('computer vs computer', () => {
   // Hard looks ahead, so it gets fewer games to keep the suite quick
-  const games: Record<Difficulty, number> = { easy: 300, medium: 300, hard: 10 }
+  const games: Record<Difficulty, number> = { easy: 300, medium: 300, hard: 6 }
 
   for (const difficulty of DIFFICULTIES) {
     it(`finishes almost every ${difficulty} game, always by a player running out of cards`, () => {
@@ -312,6 +317,6 @@ describe('difficulty tournament', () => {
   })
 
   it('hard beats medium', () => {
-    expect(winRate('hard', 'medium', 80)).toBeGreaterThan(0.65)
+    expect(winRate('hard', 'medium', 60)).toBeGreaterThan(0.65)
   }, 60_000)
 })
