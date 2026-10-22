@@ -22,8 +22,8 @@ class Card:
 	def __init__(self, value, hidden = False, played = False):
 		self.value = value
 		self.face = VALUE_TO_FACE[value]
-		self.hidden = False
-		self.played = False
+		self.hidden = hidden
+		self.played = played
 
 	# prints a card image in center of window
 	def print(self):
