@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:tournament": "vitest run src/tournament.test.ts --mode tournament",
     "build:single": "npm run build && node scripts/inline.mjs"
   },
   "dependencies": {

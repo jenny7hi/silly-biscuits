@@ -1,27 +1,20 @@
 import { describe, expect, it } from 'vitest'
+import { type Difficulty, computerMove, computerTurn, unseenCards } from './ai'
 import {
   type Card,
   type GameState,
   type PileCard,
-  cardsLeft,
-  computerTurn,
+  SUITS,
+  cloneState,
   isLegal,
   newGame,
   noMove,
   play,
   reference,
+  shuffle,
 } from './game'
+import { mulberry32, twoComputers } from './testing'
 
-// small seeded generator so games are reproducible
-function mulberry32(seed: number) {
-  return () => {
-    seed |= 0
-    seed = (seed + 0x6d2b79f5) | 0
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
 
 let nextId = 1000
 const card = (rank: number): Card => ({ id: nextId++, rank, suit: '♠' })
@@ -167,37 +160,85 @@ describe('noMove', () => {
   })
 })
 
-describe('computer vs computer', () => {
-  it('finishes almost every game, always by a player running out of cards', () => {
-    let hiddenPlays = 0
-    let unfinished = 0
-    for (let seed = 0; seed < 300; seed++) {
-      let g = newGame({
-        players: [
-          { name: 'A', isComputer: true },
-          { name: 'B', isComputer: true },
-        ],
-        rng: mulberry32(seed),
-      })
-      let turns = 0
-      while (g.winner === null && turns < 3000) {
-        const before = g.players.map((p) => p.slots.filter((s) => s.hidden).length)
-        g = computerTurn(g)
-        expect(g.error).toBeNull()
-        hiddenPlays += before.reduce((n, h, i) => n + h - g.players[i].slots.filter((s) => s.hidden).length, 0)
-        turns++
-      }
-      // once every 10 is in the discard, no cards leave play, and two deterministic
-      // computers can pass the same cards back and forth forever (about 11 in 300 games
-      // since the player who picks up leads the next pile). A person breaks the loop.
-      if (g.winner === null) {
-        unfinished++
-        continue
-      }
-      // the only way to win is to play every card
-      expect(cardsLeft(g.players[g.winner])).toBe(0)
+// an endgame with the deck empty where every card not listed is already on the pile, so
+// the computer (player 0) can work out exactly what the opponent is holding. offTable
+// lists ranks that are in play somewhere else, e.g. in a reserved slot set up by the test.
+function endgame(opts: { mine: number[]; theirs: number[]; top: number; goingUp?: boolean; offTable?: number[] }) {
+  const { mine, theirs, top, goingUp = true, offTable = [] } = opts
+  const g = withPile([], goingUp)
+  const counts = Array(14).fill(4)
+  for (const rank of [...mine, ...theirs, ...offTable, top]) counts[rank]--
+  g.pile = counts.flatMap((n, rank) => Array.from({ length: rank ? n : 0 }, () => onPile(rank)))
+  g.pile.push(onPile(top))
+  g.deck = []
+  const empty = () => [0, 1, 2].map(() => ({ public: null, hidden: null }))
+  g.players[0].hand = mine.map(card)
+  g.players[0].slots = empty()
+  g.players[1].hand = theirs.map(card)
+  g.players[1].slots = empty()
+  return g
+}
+
+const played = (g: GameState, difficulty: Difficulty) => {
+  const move = computerMove(g, difficulty, mulberry32(5))
+  return move?.from === 'hand' ? g.players[0].hand.find((c) => c.id === move.cardId)?.rank : move
+}
+
+describe('computerMove', () => {
+  it('only ever picks a legal card on easy', () => {
+    const g = endgame({ mine: [3, 5, 9, 12], theirs: [4], top: 7 })
+    const picks = new Set<number>()
+    for (let seed = 0; seed < 20; seed++) {
+      const move = computerMove(g, 'easy', mulberry32(seed))
+      picks.add(move?.from === 'hand' ? g.players[0].hand.find((c) => c.id === move.cardId)!.rank : 0)
     }
-    expect(unfinished).toBeLessThan(20)
-    expect(hiddenPlays).toBeGreaterThan(0)
+    expect([...picks].sort()).toEqual([12, 9])
+  })
+
+  it('plays the lowest useful card on medium', () => {
+    expect(played(endgame({ mine: [8, 1, 9, 12], theirs: [4], top: 7 }), 'medium')).toBe(9)
+    expect(played(endgame({ mine: [8, 1, 3, 5], theirs: [4], top: 7, goingUp: false }), 'medium')).toBe(5)
+  })
+
+  it('clears a public card covering a hidden one before playing from the hand', () => {
+    const g = endgame({ mine: [9], theirs: [10], top: 3, offTable: [11, 6] })
+    g.players[0].slots[1] = { public: card(11), hidden: card(6) }
+    for (const difficulty of ['medium', 'hard'] as const) {
+      expect(computerMove(g, difficulty, mulberry32(1))).toEqual({ from: 'public', slot: 1 })
+    }
+  })
+
+  it('leaves the opponent stuck on hard when that wins the game', () => {
+    // the opponent's last card is a 5: a 4 lets them win, but after a king they have to
+    // pick up the pile and the 4 then wins
+    const g = endgame({ mine: [4, 13], theirs: [5], top: 3 })
+    expect(played(g, 'medium')).toBe(4)
+    expect(played(g, 'hard')).toBe(13)
+  })
+
+  it('flips the direction on hard when the opponent cannot follow it', () => {
+    // going up from a 3 the opponent's queen would follow and win, but after a 2 they
+    // need something lower
+    const g = endgame({ mine: [2, 4], theirs: [12], top: 3 })
+    expect(played(g, 'hard')).toBe(2)
+  })
+
+  it('never uses hidden information on hard', () => {
+    // shuffling the cards hard can't see must not change what it plays
+    for (let seed = 0; seed < 30; seed++) {
+      let g = twoComputers(seed)
+      const rng = mulberry32(seed)
+      while (g.winner === null && g.deck.length > 2) g = computerTurn(g, 'medium', rng)
+      if (g.winner !== null) continue
+      const me = g.current
+      const scrambled = cloneState(g)
+      const pool = shuffle(unseenCards(g, me), mulberry32(seed + 1)).map((c, i) => ({ ...c, id: 5000 + i, suit: SUITS[i % 4] }))
+      scrambled.players.forEach((p, i) => {
+        if (i !== me) p.hand = pool.splice(0, p.hand.length)
+        for (const slot of p.slots) if (slot.hidden) slot.hidden = pool.pop()!
+      })
+      scrambled.deck = pool.splice(0, g.deck.length)
+      expect(computerMove(scrambled, 'hard', mulberry32(9))).toEqual(computerMove(g, 'hard', mulberry32(9)))
+    }
   })
 })

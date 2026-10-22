@@ -213,6 +213,18 @@ export function hasPlays(state: GameState, player: number): boolean {
 
 const hasWon = (p: Player) => p.hand.length === 0 && p.slots.every((s) => !s.public && !s.hidden)
 
+// cards are never changed once dealt, so a copy only needs fresh arrays, players and slots.
+// This is much faster than structuredClone, which matters for the computer's lookahead.
+export function cloneState(state: GameState): GameState {
+  return {
+    ...state,
+    players: state.players.map((p) => ({ ...p, hand: [...p.hand], slots: p.slots.map((s) => ({ ...s })) })),
+    deck: [...state.deck],
+    pile: [...state.pile],
+    discard: [...state.discard],
+  }
+}
+
 const playedVerb = (p: Player) => `${p.name} played`
 
 // moves the whole pile (and a failed hidden card, if any) into the current player's hand
@@ -235,7 +247,7 @@ function advance(state: GameState) {
 // plays a card for the current player. A rejected play sets `error` and keeps the turn.
 export function play(state: GameState, source: Source): GameState {
   if (state.winner !== null) return state
-  const s = structuredClone(state)
+  const s = cloneState(state)
   s.error = null
   const p = s.players[s.current]
   const found = resolve(s, s.current, source)
@@ -307,40 +319,12 @@ export function play(state: GameState, source: Source): GameState {
 // empty pile themselves with any card.
 export function noMove(state: GameState): GameState {
   if (state.winner !== null) return state
-  const s = structuredClone(state)
+  const s = cloneState(state)
   s.error = null
   const p = s.players[s.current]
   const count = pickUpPile(s)
   s.message = `${p.name} couldn't play and picked up ${count === 1 ? 'the card' : `all ${count} cards`} on the pile. ${playsNext(p)}`
   return s
-}
-
-// a simple computer strategy: keep specials and aces for later, and play the card
-// that keeps the most options open. Hidden cards are played blind.
-export function computerMove(state: GameState): Source | null {
-  const p = state.players[state.current]
-  const cost = (card: Card) => {
-    if (isSpecial(card)) return 100 + card.rank
-    if (card.rank === 1) return 50
-    return state.goingUp ? card.rank : 14 - card.rank
-  }
-  const best = (cards: Card[]) =>
-    cards.filter((c) => isLegal(state, c)).sort((a, b) => cost(a) - cost(b))[0]
-
-  const fromHand = best(p.hand)
-  if (fromHand) return { from: 'hand', cardId: fromHand.id }
-  if (reservedLocked(state)) return null
-
-  const fromPublic = best(p.slots.flatMap((s) => (s.public ? [s.public] : [])))
-  if (fromPublic) return { from: 'public', slot: p.slots.findIndex((s) => s.public?.id === fromPublic.id) }
-
-  const hiddenSlot = p.slots.findIndex((s) => !s.public && s.hidden)
-  return hiddenSlot >= 0 ? { from: 'hidden', slot: hiddenSlot } : null
-}
-
-export function computerTurn(state: GameState): GameState {
-  const move = hasPlays(state, state.current) ? computerMove(state) : null
-  return move ? play(state, move) : noMove(state)
 }
 
 export const cardsLeft = (p: Player) =>

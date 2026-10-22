@@ -12,7 +12,9 @@ There is also a React version in the `web` folder, styled like Windows XP Solita
 2. In terminal, run `cd web && npm install`.
 3. Run `npm run dev` and open the address it prints.
 
-Click a card to play it and press F2 to deal a new game. Run `npm test` in the `web` folder to test the rules engine.
+Click a card to play it and press F2 to deal a new game. Choose how well the computer plays (Easy, Medium or Hard) from the Game menu.
+
+Run `npm test` in the `web` folder to test the rules engine and the computer players, including a short tournament between the difficulty levels. `npm run test:tournament` plays the full tournament, which takes several minutes, and prints each matchup's win rate and how many games never finished.
 
 To publish it as one self-contained page (for example, to encrypt it with StatiCrypt), run `npm run build:single`, which writes `web/dist/single/index.html` with the JS and CSS inlined. `web/staticrypt-template.html` is a StatiCrypt password page styled like the game; pass it with `-t`.
 

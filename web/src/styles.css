@@ -248,6 +248,7 @@ button.xp-button--close:hover {
 }
 
 .xp-menu__item {
+  position: relative;
   display: flex;
   justify-content: space-between;
   gap: 24px;
@@ -264,6 +265,12 @@ button.xp-button--close:hover {
   background: var(--xp-highlight);
   color: #fff;
   outline: none;
+}
+
+.xp-menu__check {
+  position: absolute;
+  left: 5px;
+  font-weight: bold;
 }
 
 .xp-menu__separator {
