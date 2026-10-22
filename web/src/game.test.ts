@@ -125,6 +125,7 @@ describe('play', () => {
     const next = play(g, { from: 'hidden', slot: 0 })
     expect(next.players[0].slots[0]).toEqual({ public: null, hidden: null })
     expect(next.players[0].hand.map((c) => c.rank)).toEqual([4, 9, 12])
+    expect(next.pickup).toMatchObject({ player: 0, flipped: hidden, slot: 0 })
     expect(next.pile).toEqual([])
     expect(next.current).toBe(1)
   })
@@ -133,6 +134,7 @@ describe('play', () => {
     const g = withPile([onPile(8)])
     const next = play(g, { from: 'hand', cardId: g.players[0].hand[0].id })
     expect(next.players[0].hand).toHaveLength(5)
+    expect(next.draw).toMatchObject({ id: 1, player: 0, cards: [g.deck[0]] })
   })
 
   it('declares a winner when the last card is played', () => {
@@ -154,6 +156,8 @@ describe('noMove', () => {
     expect(next.pile).toEqual([])
     expect(next.deck).toHaveLength(g.deck.length)
     expect(next.current).toBe(1)
+    expect(next.pickup).toMatchObject({ id: 1, player: 0, flipped: null })
+    expect(next.pickup?.cards.map((c) => c.rank)).toEqual([4, 9, 13])
   })
 
   it('does not end the game when the deck is empty', () => {

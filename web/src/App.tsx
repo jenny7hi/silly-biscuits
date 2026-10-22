@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { CardView, EmptySpot } from './CardView'
 import {
   type GameState,
@@ -15,6 +15,15 @@ import {
   requirement,
 } from './game'
 import { Kaboom } from './Kaboom'
+import {
+  Deal,
+  type DealAnimation,
+  type Point,
+  Swoosh,
+  type SwooshAnimation,
+  dealDuration,
+  swooshDuration,
+} from './Swoosh'
 import { WinCascade } from './WinCascade'
 import { MenuBar, MessageBox, StatusBar, TitleBar } from './Xp'
 
@@ -37,6 +46,9 @@ export default function App() {
   const [flash, setFlash] = useState<string | null>(null)
   // the cards flying out of an exploding pile, and how big the discard was before
   const [kaboom, setKaboom] = useState<{ cards: PileCard[]; before: number } | null>(null)
+  const [swoosh, setSwoosh] = useState<SwooshAnimation | null>(null)
+  const [drawing, setDrawing] = useState<DealAnimation | null>(null)
+  const feltRef = useRef<HTMLElement>(null)
 
   const deal = useCallback(() => {
     setGame(newGame())
@@ -47,11 +59,79 @@ export default function App() {
   const humanTurn = game.winner === null && game.current === HUMAN
   const humanStuck = humanTurn && !hasPlays(game, HUMAN)
 
-  // computer turns
+  // computer turns, waiting for a pickup animation to finish first
   useEffect(() => {
-    if (game.winner !== null || !game.players[game.current].isComputer) return
+    if (game.winner !== null || !game.players[game.current].isComputer || swoosh) return
     const timer = setTimeout(() => setGame(computerTurn), COMPUTER_DELAY)
     return () => clearTimeout(timer)
+  }, [game, swoosh])
+
+  // someone had to pick up the pile: swoosh it into their hand. This measures where the
+  // pile, the hand and the flipped hidden card sit on the table, before the browser paints.
+  const seenPickup = useRef(game.pickup?.id)
+  useLayoutEffect(() => {
+    const pickup = game.pickup
+    if (!pickup || pickup.id === seenPickup.current) return
+    seenPickup.current = pickup.id
+    const felt = feltRef.current
+    if (!felt) return
+    const origin = felt.getBoundingClientRect()
+    const at = (selector: string): Point | null => {
+      const rect = felt.querySelector(selector)?.getBoundingClientRect()
+      return rect ? { x: rect.left - origin.left, y: rect.top - origin.top } : null
+    }
+    const flipped = pickup.flipped
+    const cards = pickup.cards.slice(-4)
+    setSwoosh({
+      id: pickup.id,
+      cards,
+      pile: at('.pile')!,
+      hand: handTarget(felt, pickup.player),
+      flipped,
+      flippedAt: flipped ? at(`[data-seat="${pickup.player}"][data-slot="${pickup.slot}"]`) : null,
+      duration: prefersReducedMotion() ? 900 : swooshDuration(cards.length + (flipped ? 1 : 0), flipped !== null),
+      hiddenIds: new Set([...pickup.cards, ...(flipped ? [flipped] : [])].map((c) => c.id)),
+      player: pickup.player,
+    })
+  }, [game.pickup])
+
+  useEffect(() => {
+    if (!swoosh) return
+    const timer = setTimeout(() => setSwoosh(null), swoosh.duration)
+    return () => clearTimeout(timer)
+  }, [swoosh])
+
+  // cards drawn from the deck after a play fly into the hand
+  const seenDraw = useRef(game.draw?.id)
+  useLayoutEffect(() => {
+    const draw = game.draw
+    if (!draw || draw.id === seenDraw.current) return
+    seenDraw.current = draw.id
+    const felt = feltRef.current
+    if (!felt || prefersReducedMotion()) return
+    const origin = felt.getBoundingClientRect()
+    const deckRect = felt.querySelector('[data-deck]')!.getBoundingClientRect()
+    setDrawing({
+      id: draw.id,
+      player: draw.player,
+      cards: draw.cards,
+      deck: { x: deckRect.left - origin.left, y: deckRect.top - origin.top },
+      hand: handTarget(felt, draw.player),
+      reveal: draw.player === HUMAN,
+      duration: dealDuration(draw.cards.length),
+      hiddenIds: new Set(draw.cards.map((c) => c.id)),
+    })
+  }, [game.draw])
+
+  useEffect(() => {
+    if (!drawing) return
+    const timer = setTimeout(() => setDrawing(null), drawing.duration)
+    return () => clearTimeout(timer)
+  }, [drawing])
+
+  // in development, expose the game so animations can be checked from the console
+  useEffect(() => {
+    if (import.meta.env.DEV) Object.assign(window, { __silly: { game, setGame, play, noMove } })
   }, [game])
 
   // a 10 just blew the pile into the discard: play the explosion over the pile
@@ -144,11 +224,16 @@ export default function App() {
           ]}
         />
 
-        <main className={`felt ${kaboom && !prefersReducedMotion() ? 'felt--shake' : ''}`}>
-          <Seat player={computer} active={game.winner === null && game.current === 1} opponent />
+        <main className={`felt ${kaboom && !prefersReducedMotion() ? 'felt--shake' : ''}`} ref={feltRef}>
+          <Seat
+            player={computer}
+            active={game.winner === null && game.current === 1}
+            opponent
+            incoming={incomingFor(1, swoosh, drawing)}
+          />
 
           <section className="table-center" aria-label="Table">
-            <div className="table-center__stack">
+            <div className="table-center__stack" data-deck>
               {game.deck.length > 0 ? (
                 <CardView faceDown className="deck" label={`Deck, ${game.deck.length} cards`} />
               ) : (
@@ -210,7 +295,11 @@ export default function App() {
             reservedLocked={game.deck.length > 0}
             onPlay={humanTurn ? attempt : undefined}
             flash={flash}
+            incoming={incomingFor(HUMAN, swoosh, drawing)}
           />
+
+          {swoosh && <Swoosh animation={swoosh} key={`swoosh-${swoosh.id}`} />}
+          {drawing && <Deal animation={drawing} key={`deal-${drawing.id}`} />}
 
           {celebrating && <WinCascade cards={[...game.discard, ...game.pile]} onDone={endCelebration} />}
         </main>
@@ -277,6 +366,25 @@ export default function App() {
   )
 }
 
+// where a card flying into a player's hand should land: the middle of the cards they hold,
+// relative to the felt
+function handTarget(felt: HTMLElement, player: number): Point {
+  const origin = felt.getBoundingClientRect()
+  const hand = felt.querySelector(player === HUMAN ? '.seat--you .hand' : '.seat--opponent .hand')!
+  const cardWidth = parseFloat(getComputedStyle(felt).getPropertyValue('--card-w')) || 71
+  const first = hand.firstElementChild?.getBoundingClientRect()
+  const last = hand.lastElementChild?.getBoundingClientRect()
+  const area = hand.getBoundingClientRect()
+  const centre = first && last ? (first.left + last.right) / 2 : area.left + area.width / 2
+  return { x: centre - cardWidth / 2 - origin.left, y: area.top + (area.height - cardWidth * 1.35) / 2 - origin.top }
+}
+
+// the ids of cards still flying into a player's hand
+function incomingFor(player: number, ...animations: ({ player: number; hiddenIds: Set<number> } | null)[]) {
+  const ids = animations.flatMap((a) => (a && a.player === player ? [...a.hiddenIds] : []))
+  return ids.length ? new Set(ids) : undefined
+}
+
 interface SeatProps {
   player: Player
   active: boolean
@@ -284,14 +392,17 @@ interface SeatProps {
   reservedLocked?: boolean
   onPlay?: (source: Source) => void
   flash?: string | null
+  // cards still flying into this hand, kept out of it until they land
+  incoming?: Set<number>
 }
 
-function Seat({ player, active, opponent, reservedLocked, onPlay, flash }: SeatProps) {
+function Seat({ player, active, opponent, reservedLocked, onPlay, flash, incoming }: SeatProps) {
+  const handCards = incoming ? player.hand.filter((c) => !incoming.has(c.id)) : player.hand
   const hand = (
     <div className={`hand ${opponent ? 'hand--opponent' : ''}`} aria-label={`${player.name} hand`}>
-      {player.hand.length === 0 && <EmptySpot />}
+      {handCards.length === 0 && <EmptySpot />}
       {/* each card sits in a slot that shrinks when the hand gets big, so the cards overlap more */}
-      {player.hand.map((card) => (
+      {handCards.map((card) => (
         <div className="hand__slot" key={card.id}>
           {opponent ? (
             <CardView faceDown />
@@ -311,7 +422,7 @@ function Seat({ player, active, opponent, reservedLocked, onPlay, flash }: SeatP
   const reserved = (
     <div className="reserved" aria-label={`${player.name} reserved cards`}>
       {player.slots.map((slot, i) => (
-        <div className="slot" key={i}>
+        <div className="slot" key={i} data-seat={opponent ? 1 : HUMAN} data-slot={i}>
           {slot.hidden ? (
             <CardView
               faceDown
