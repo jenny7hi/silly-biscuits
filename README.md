@@ -6,6 +6,26 @@ Silly Biscuits is a strategy card game that can be played by two or more people.
 2.	In terminal, navigate to location of repository.
 3.	Run `python silly_biscuits.py`
 
+## Playing in the browser
+There is also a React version in the `web` folder, styled like Windows XP Solitaire, where you play against the computer.
+1. Install [Node.js](https://nodejs.org/) 18 or newer.
+2. In terminal, run `cd web && npm install`.
+3. Run `npm run dev` and open the address it prints.
+
+Click a card to play it and press F2 to deal a new game. Choose how well the computer plays (Easy, Medium or Hard) from the Game menu.
+
+Run `npm test` in the `web` folder to test the rules engine and the computer players, including a short tournament between the difficulty levels. `npm run test:tournament` plays the full tournament, which takes several minutes, and prints each matchup's win rate and how many games never finished.
+
+To publish it as one self-contained page (for example, to encrypt it with StatiCrypt), run `npm run build:single`, which writes `web/dist/single/index.html` with the JS and CSS inlined. `web/staticrypt-template.html` is a StatiCrypt password page styled like the game; pass it with `-t`.
+
+The 饼干 brush characters on the card back are outlines from the [Ma Shan Zheng](https://github.com/googlefonts/mashanzheng) font, used under the SIL Open Font License (see `web/src/licenses/MaShanZheng-OFL.txt`).
+
+The browser version differs from the terminal version in two ways:
+- If you can't play, you pick up the whole pile (click it), instead of drawing a card, and then start the empty pile with any card. Being stuck never ends the game: you win by playing all your cards.
+- If a hidden card you flip can't be played, you pick it up along with the whole pile, instead of it being turned face up, and then play again.
+- A 10 blows the pile up (轰！) into a discard pile, taking those cards out of the game.
+- Cards animate as they move: drawn cards fly from the deck into your hand, and a picked-up pile swooshes into the picker's hand. A failed hidden flip is stamped 错！ ("wrong!") first.
+
 ## Game rules
 ### Setup
 Each player is dealt five cards in their hand, as well as six reserved cards, three public cards, each on top of one of three hidden cards. One card is placed as the start of the pile, and the remaining are used as a draw deck. There is a direction, which starts up. Objective is to play all hand and reserved cards.
