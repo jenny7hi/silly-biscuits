@@ -1254,8 +1254,8 @@ button.card {
 .biscuit-tile__art {
   position: relative;
   flex: none;
-  width: 100px;
-  height: 80px;
+  width: 88px;
+  height: 88px;
 }
 
 .biscuit-tile__art svg {
@@ -1290,40 +1290,6 @@ button.card {
   font-size: 11px;
 }
 
-/* Soggy drips, Crumbly sheds crumbs when you point at it */
-.biscuit-art__drip {
-  animation: soggy-drip 2.4s ease-in infinite;
-}
-
-.biscuit-art__drip--late {
-  animation-delay: 1.2s;
-}
-
-@keyframes soggy-drip {
-  0% {
-    transform: translateY(-3px);
-    opacity: 0;
-  }
-  20% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(8px);
-    opacity: 0;
-  }
-}
-
-.biscuit-tile--medium:hover .biscuit-art__crumbs {
-  animation: crumbly-shed 0.9s ease-in infinite;
-}
-
-@keyframes crumbly-shed {
-  to {
-    transform: translateY(4px);
-    opacity: 0.3;
-  }
-}
-
 /* Crunchy is the one thing in here that isn't calm */
 .biscuit-tile--hard {
   border-color: #4a0000;
@@ -1356,11 +1322,13 @@ button.card {
 }
 
 .biscuit-tile--hard:hover .biscuit-tile__art svg {
-  animation: crunchy-shake 0.3s linear infinite;
+  animation:
+    crunchy-shake 0.3s linear infinite,
+    crunchy-glow 1.6s ease-in-out infinite;
 }
 
-.biscuit-art__eyes {
-  animation: crunchy-glare 1.6s ease-in-out infinite;
+.biscuit-tile--hard .biscuit-tile__art svg {
+  animation: crunchy-glow 1.6s ease-in-out infinite;
 }
 
 @keyframes crunchy-shake {
@@ -1375,9 +1343,9 @@ button.card {
   }
 }
 
-@keyframes crunchy-glare {
+@keyframes crunchy-glow {
   50% {
-    opacity: 0.5;
+    filter: drop-shadow(0 0 6px rgba(255, 40, 0, 0.9));
   }
 }
 
@@ -1432,8 +1400,8 @@ button.card {
   }
 
   .biscuit-tile__art {
-    width: 75px;
-    height: 60px;
+    width: 64px;
+    height: 64px;
   }
 
   .biscuit-tile__text {
@@ -1446,9 +1414,7 @@ button.card {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .biscuit-art__drip,
-  .biscuit-art__eyes,
-  .biscuit-tile--medium:hover .biscuit-art__crumbs,
+  .biscuit-tile--hard .biscuit-tile__art svg,
   .biscuit-tile--hard:hover .biscuit-tile__art svg,
   .biscuit-tile__stamp {
     animation: none;
