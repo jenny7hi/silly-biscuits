@@ -91,7 +91,8 @@ export function rankLabel(rank: number): string {
   return { 1: 'A', 11: 'J', 12: 'Q', 13: 'K' }[rank] ?? String(rank)
 }
 
-export const cardLabel = (card: Card) => rankLabel(card.rank) + card.suit
+// U+FE0E asks for the plain text style of the suit, not a glossy emoji heart or diamond
+export const cardLabel = (card: Card) => `${rankLabel(card.rank)}${card.suit}\uFE0E`
 
 export function shuffle<T>(items: T[], rng: () => number = Math.random): T[] {
   const result = [...items]
@@ -225,6 +226,8 @@ function pickUpPile(state: GameState, flipped: Card | null = null, slot: number 
   return cards.length
 }
 
+const playsNext = (p: Player) => (p.name === 'You' ? 'You play next.' : `${p.name} plays next.`)
+
 function advance(state: GameState) {
   state.current = (state.current + 1) % state.players.length
 }
@@ -245,9 +248,9 @@ export function play(state: GameState, source: Source): GameState {
     }
     // a hidden card that turns out to be illegal goes into the hand along with the whole pile
     p.slots[source.slot].hidden = null
+    // the same player then starts the empty pile
     const count = pickUpPile(s, card, source.slot)
-    s.message = `${p.name} turned over a hidden ${cardLabel(card)}, but it can't be played, so ${p.name === 'You' ? 'you pick' : `${p.name} picks`} it up with ${count === 1 ? 'the card' : `all ${count} cards`} on the pile.`
-    advance(s)
+    s.message = `${p.name} turned over a hidden ${cardLabel(card)}, but it can't be played, so ${p.name === 'You' ? 'you pick' : `${p.name} picks`} it up with ${count === 1 ? 'the card' : `all ${count} cards`} on the pile. ${playsNext(p)}`
     return s
   }
 
@@ -300,16 +303,15 @@ export function play(state: GameState, source: Source): GameState {
   return s
 }
 
-// the current player has no legal play: they pick up the whole pile and lose the turn.
-// The pile is then empty, so the next player can play anything.
+// the current player has no legal play: they pick up the whole pile, then start the
+// empty pile themselves with any card.
 export function noMove(state: GameState): GameState {
   if (state.winner !== null) return state
   const s = structuredClone(state)
   s.error = null
   const p = s.players[s.current]
   const count = pickUpPile(s)
-  s.message = `${p.name} couldn't play and picked up ${count === 1 ? 'the card' : `all ${count} cards`} on the pile.`
-  advance(s)
+  s.message = `${p.name} couldn't play and picked up ${count === 1 ? 'the card' : `all ${count} cards`} on the pile. ${playsNext(p)}`
   return s
 }
 

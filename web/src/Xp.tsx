@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { Suit } from './Suit'
 
 // Windows XP "Luna" window pieces: title bar, menu bar, status bar and message box
 
@@ -7,7 +8,9 @@ export function TitleBar({ title, onClose }: { title: string; onClose?: () => vo
     <div className="xp-titlebar">
       <span className="xp-titlebar__icon" aria-hidden="true">
         <span className="xp-titlebar__icon-card" />
-        <span className="xp-titlebar__icon-card xp-titlebar__icon-card--front" />
+        <span className="xp-titlebar__icon-card xp-titlebar__icon-card--front">
+          <Suit suit="♥" />
+        </span>
       </span>
       <span className="xp-titlebar__title">{title}</span>
       <span className="xp-titlebar__buttons">

@@ -117,7 +117,7 @@ describe('play', () => {
     expect(play(g, { from: 'public', slot: 0 }).error).toMatch(/deck is empty/)
   })
 
-  it('picks up an illegal hidden card along with the pile and ends the turn', () => {
+  it('picks up an illegal hidden card along with the pile, then plays again', () => {
     const g = withPile([onPile(9), onPile(12)])
     const hidden = card(4)
     g.deck = []
@@ -128,7 +128,7 @@ describe('play', () => {
     expect(next.players[0].hand.map((c) => c.rank)).toEqual([4, 9, 12])
     expect(next.pickup).toMatchObject({ player: 0, flipped: hidden, slot: 0 })
     expect(next.pile).toEqual([])
-    expect(next.current).toBe(1)
+    expect(next.current).toBe(0)
   })
 
   it('refills the hand to five from the deck', () => {
@@ -149,14 +149,14 @@ describe('play', () => {
 })
 
 describe('noMove', () => {
-  it('picks up the whole pile and passes the turn', () => {
+  it('picks up the whole pile, then plays again', () => {
     const g = withPile([onPile(4), onPile(9), onPile(13)])
     const next = noMove(g)
     expect(next.players[0].hand).toHaveLength(8)
     expect(next.players[0].hand.some((c) => 'value' in c)).toBe(false)
     expect(next.pile).toEqual([])
     expect(next.deck).toHaveLength(g.deck.length)
-    expect(next.current).toBe(1)
+    expect(next.current).toBe(0)
     expect(next.pickup).toMatchObject({ id: 1, player: 0, flipped: null })
     expect(next.pickup?.cards.map((c) => c.rank)).toEqual([4, 9, 13])
   })
@@ -188,7 +188,8 @@ describe('computer vs computer', () => {
         turns++
       }
       // once every 10 is in the discard, no cards leave play, and two deterministic
-      // computers can pass the same cards back and forth forever. That is rare.
+      // computers can pass the same cards back and forth forever (about 11 in 300 games
+      // since the player who picks up leads the next pile). A person breaks the loop.
       if (g.winner === null) {
         unfinished++
         continue
@@ -196,7 +197,7 @@ describe('computer vs computer', () => {
       // the only way to win is to play every card
       expect(cardsLeft(g.players[g.winner])).toBe(0)
     }
-    expect(unfinished).toBeLessThan(10)
+    expect(unfinished).toBeLessThan(20)
     expect(hiddenPlays).toBeGreaterThan(0)
   })
 })

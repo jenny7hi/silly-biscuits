@@ -1,8 +1,20 @@
 import { useEffect, useRef } from 'react'
 import { type Card, isRed, rankLabel } from './game'
+import { SUIT_PATHS } from './Suit'
 
 const W = 71
 const H = 96
+
+const suitShapes = new Map<string, Path2D>()
+
+function drawSuit(ctx: CanvasRenderingContext2D, card: Card, x: number, y: number, size: number) {
+  if (!suitShapes.has(card.suit)) suitShapes.set(card.suit, new Path2D(SUIT_PATHS[card.suit]))
+  ctx.save()
+  ctx.translate(x - size / 2, y - size / 2)
+  ctx.scale(size / 100, size / 100)
+  ctx.fill(suitShapes.get(card.suit)!)
+  ctx.restore()
+}
 
 function drawCard(ctx: CanvasRenderingContext2D, card: Card, x: number, y: number) {
   ctx.fillStyle = '#fff'
@@ -12,14 +24,17 @@ function drawCard(ctx: CanvasRenderingContext2D, card: Card, x: number, y: numbe
   ctx.roundRect(x + 0.5, y + 0.5, W - 1, H - 1, 4)
   ctx.fill()
   ctx.stroke()
-  ctx.fillStyle = isRed(card) ? '#e00000' : '#000'
+  ctx.fillStyle = isRed(card) ? '#d42a1e' : '#161616'
   ctx.textAlign = 'center'
   ctx.font = 'bold 14px Tahoma, Verdana, sans-serif'
   ctx.fillText(rankLabel(card.rank), x + 11, y + 17)
-  ctx.font = '13px Tahoma, Verdana, sans-serif'
-  ctx.fillText(card.suit, x + 11, y + 31)
-  ctx.font = card.rank > 10 ? 'bold 30px Georgia, serif' : '34px Georgia, serif'
-  ctx.fillText(card.rank > 10 ? rankLabel(card.rank) : card.suit, x + W / 2, y + H / 2 + 12)
+  drawSuit(ctx, card, x + 11, y + 27, 11)
+  if (card.rank > 10) {
+    ctx.font = "bold 30px 'Times New Roman', serif"
+    ctx.fillText(rankLabel(card.rank), x + W / 2, y + H / 2 + 12)
+  } else {
+    drawSuit(ctx, card, x + W / 2, y + H / 2, 30)
+  }
 }
 
 // the Windows XP Solitaire victory animation: cards launch one at a time, bounce along

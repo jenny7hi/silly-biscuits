@@ -1,4 +1,5 @@
 import { type Card, cardLabel, isRed, rankLabel } from './game'
+import { Suit } from './Suit'
 
 interface CardViewProps {
   card?: Card | null
@@ -25,16 +26,14 @@ export function CardView({ card, faceDown, onClick, label, disabled, flash, clas
       <>
         <span className="card__corner card__corner--top">
           {rankLabel(card.rank)}
-          <br />
-          {card.suit}
+          <Suit suit={card.suit} className="card__corner-suit" />
         </span>
         <span className={`card__center ${card.rank > 10 ? 'card__center--face' : ''}`}>
-          {card.rank > 10 ? rankLabel(card.rank) : card.suit}
+          {card.rank > 10 ? rankLabel(card.rank) : <Suit suit={card.suit} className="card__pip" />}
         </span>
         <span className="card__corner card__corner--bottom">
           {rankLabel(card.rank)}
-          <br />
-          {card.suit}
+          <Suit suit={card.suit} className="card__corner-suit" />
         </span>
       </>
     )
