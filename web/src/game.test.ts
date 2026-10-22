@@ -3,6 +3,7 @@ import {
   type Card,
   type GameState,
   type PileCard,
+  cardsLeft,
   computerTurn,
   isLegal,
   newGame,
@@ -97,6 +98,8 @@ describe('play', () => {
     g.deck = []
     let next = play(g, { from: 'hand', cardId: ten.id })
     expect(next.current).toBe(0)
+    expect(next.pile).toEqual([])
+    expect(next.discard.map((c) => c.rank)).toEqual([5, 10])
     next = play(next, { from: 'hand', cardId: eight.id })
     expect(next.current).toBe(1)
   })
@@ -140,23 +143,26 @@ describe('play', () => {
 })
 
 describe('noMove', () => {
-  it('draws a card and passes the turn while the deck has cards', () => {
-    const g = newGame({ rng: mulberry32(3) })
+  it('picks up the whole pile and passes the turn', () => {
+    const g = withPile([onPile(4), onPile(9), onPile(13)])
     const next = noMove(g)
-    expect(next.players[0].hand).toHaveLength(6)
+    expect(next.players[0].hand).toHaveLength(8)
+    expect(next.players[0].hand.some((c) => 'value' in c)).toBe(false)
+    expect(next.pile).toEqual([])
+    expect(next.deck).toHaveLength(g.deck.length)
     expect(next.current).toBe(1)
   })
 
-  it('ends the game when the deck is empty', () => {
-    const g = { ...newGame({ rng: mulberry32(3) }), deck: [] }
-    expect(noMove(g).winner).toBe(1)
+  it('does not end the game when the deck is empty', () => {
+    const g = { ...withPile([onPile(13)]), deck: [] }
+    expect(noMove(g).winner).toBeNull()
   })
 })
 
 describe('computer vs computer', () => {
-  it('finishes every game without getting stuck', () => {
+  it('finishes almost every game, always by a player running out of cards', () => {
     let hiddenPlays = 0
-    let finishedByEmptyingHand = 0
+    let unfinished = 0
     for (let seed = 0; seed < 300; seed++) {
       let g = newGame({
         players: [
@@ -166,16 +172,23 @@ describe('computer vs computer', () => {
         rng: mulberry32(seed),
       })
       let turns = 0
-      while (g.winner === null) {
+      while (g.winner === null && turns < 3000) {
         const before = g.players.map((p) => p.slots.filter((s) => s.hidden).length)
         g = computerTurn(g)
         expect(g.error).toBeNull()
         hiddenPlays += before.reduce((n, h, i) => n + h - g.players[i].slots.filter((s) => s.hidden).length, 0)
-        expect(++turns).toBeLessThan(1000)
+        turns++
       }
-      if (g.players[g.winner].hand.length === 0) finishedByEmptyingHand++
+      // once every 10 is in the discard, no cards leave play, and two deterministic
+      // computers can pass the same cards back and forth forever. That is rare.
+      if (g.winner === null) {
+        unfinished++
+        continue
+      }
+      // the only way to win is to play every card
+      expect(cardsLeft(g.players[g.winner])).toBe(0)
     }
+    expect(unfinished).toBeLessThan(10)
     expect(hiddenPlays).toBeGreaterThan(0)
-    expect(finishedByEmptyingHand).toBeGreaterThan(0)
   })
 })
