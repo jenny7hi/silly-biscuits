@@ -14,7 +14,7 @@ There is also a React version in the `web` folder, styled like Windows XP Solita
 
 Click a card to play it and press F2 to deal a new game. Run `npm test` in the `web` folder to test the rules engine.
 
-To publish it as one self-contained page (for example, to encrypt it with StatiCrypt), run `npm run build:single`, which writes `web/dist/single/index.html` with the JS and CSS inlined.
+To publish it as one self-contained page (for example, to encrypt it with StatiCrypt), run `npm run build:single`, which writes `web/dist/single/index.html` with the JS and CSS inlined. `web/staticrypt-template.html` is a StatiCrypt password page styled like the game; pass it with `-t`.
 
 The browser version differs from the terminal version in two ways:
 - If you can't play, you pick up the whole pile (click it) and lose your turn, instead of drawing a card. Being stuck never ends the game: you win by playing all your cards.
