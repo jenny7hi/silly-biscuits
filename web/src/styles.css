@@ -906,17 +906,6 @@ button.card {
   width: 100%;
   height: 100%;
   border-radius: 2px;
-  outline: 1px solid #7a1408;
-  outline-offset: -1px;
-}
-
-.card__back-text {
-  font: bold 14px KaiTi, 'Kaiti SC', STKaiti, serif;
-  fill: #ffd23f;
-  stroke: #6e0a06;
-  stroke-width: 1.4px;
-  paint-order: stroke fill;
-  letter-spacing: 1px;
 }
 
 .card--empty {
