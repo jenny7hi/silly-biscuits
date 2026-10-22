@@ -369,6 +369,14 @@ button.xp-button--close:hover {
   min-width: 8px;
 }
 
+.hand__slot--incoming {
+  visibility: hidden;
+}
+
+.hand__slot .card {
+  transition: transform 0.12s ease-out;
+}
+
 .hand__slot:last-child {
   flex: none;
   width: var(--card-w);
@@ -613,13 +621,30 @@ button.xp-button--close:hover {
   z-index: 4;
 }
 
-.swoosh__card {
+/* a card flying across the felt; --dx and --dy are set per card */
+.flyer {
   position: absolute;
+  will-change: transform;
 }
 
-@keyframes swoosh {
+@keyframes fly {
   to {
     transform: translate(var(--dx), var(--dy));
+  }
+}
+
+/* the rise and fall of a played card, layered on its move so the arc never stalls */
+@keyframes hop {
+  0% {
+    transform: translateY(0);
+    animation-timing-function: cubic-bezier(0.3, 0.6, 0.5, 1);
+  }
+  45% {
+    transform: translateY(-34px);
+    animation-timing-function: cubic-bezier(0.5, 0, 0.7, 0.4);
+  }
+  100% {
+    transform: translateY(0);
   }
 }
 
@@ -726,32 +751,10 @@ button.xp-button--close:hover {
 
 /* ---------- drawing: cards fly from the deck into the hand ---------- */
 
-.deal__card {
-  position: absolute;
-}
-
 /* a played card arcs up and over onto the pile */
-/* a played card hops up and over onto the pile */
-@keyframes play-arc {
-  0% {
-    transform: translate(0, 0);
-  }
-  50% {
-    transform: translate(calc(var(--dx) * 0.5), calc(var(--dy) * 0.5 - 30px));
-  }
-  100% {
-    transform: translate(var(--dx), var(--dy));
-  }
-}
 
 .play__card {
   z-index: 2;
-}
-
-@keyframes deal {
-  to {
-    transform: translate(var(--dx), var(--dy));
-  }
 }
 
 /* a little shake of the table when the pile goes up */
@@ -1147,8 +1150,7 @@ button.card {
   }
 
   /* keep the 错！ and the revealed card, but nothing flies */
-  .swoosh__card,
-  .deal__card {
+  .flyer {
     display: none;
   }
 
