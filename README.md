@@ -6,6 +6,14 @@ Silly Biscuits is a strategy card game that can be played by two or more people.
 2.	In terminal, navigate to location of repository.
 3.	Run `python silly_biscuits.py`
 
+## Playing in the browser
+There is also a React version in the `web` folder, styled like Windows XP Solitaire, where you play against the computer.
+1. Install [Node.js](https://nodejs.org/) 18 or newer.
+2. In terminal, run `cd web && npm install`.
+3. Run `npm run dev` and open the address it prints.
+
+Click a card to play it, click the deck to draw when you have no playable cards, and press F2 to deal a new game. Run `npm test` in the `web` folder to test the rules engine.
+
 ## Game rules
 ### Setup
 Each player is dealt five cards in their hand, as well as six reserved cards, three public cards, each on top of one of three hidden cards. One card is placed as the start of the pile, and the remaining are used as a draw deck. There is a direction, which starts up. Objective is to play all hand and reserved cards.
