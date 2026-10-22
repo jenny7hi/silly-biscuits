@@ -1240,9 +1240,16 @@ button.card {
   margin: 0;
 }
 
+.biscuit-tile--easy {
+  background: #f3e7d3;
+}
+
+.biscuit-tile--medium {
+  background: #f6edd9;
+}
+
 .biscuit-tile--picked {
   border-color: var(--xp-highlight);
-  background: #e3ebf8;
   box-shadow: 0 0 0 2px var(--xp-highlight);
 }
 
