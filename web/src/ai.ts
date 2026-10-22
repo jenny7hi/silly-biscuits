@@ -7,6 +7,7 @@ import {
   type GameState,
   type Source,
   SUITS,
+  cardsLeft,
   cloneState,
   hasPlays,
   isLegal,
@@ -73,14 +74,17 @@ function mediumMove(state: GameState): Source | null {
 // ---- Hard ----
 
 // the cards this player hasn't seen: everything except their own hand and public cards,
-// every public card on the table and the pile. These are somewhere in the deck, in other
-// players' hands, or face down in a reserved slot (the player's own hidden cards included).
+// every public card on the table, the pile and the discard. These are somewhere in the deck,
+// in other players' hands, or face down in a reserved slot (the player's own hidden cards
+// included). Cards another player picked up from the pile count as unseen: remembering them
+// made no difference in testing.
 export function unseenCards(state: GameState, me: number): Card[] {
   const decks = Math.ceil(state.players.length / 3)
   const counts = Array(14).fill(4 * decks)
   counts[0] = 0
   const seen = [
     ...state.pile,
+    ...state.discard,
     ...state.players[me].hand,
     ...state.players.flatMap((p) => p.slots.flatMap((s) => (s.public ? [s.public] : []))),
   ]
@@ -105,22 +109,29 @@ function determinize(state: GameState, me: number, rng: Rng): GameState {
   return s
 }
 
-// plays a game to the end with Medium on every side and returns the winner
-function playOut(state: GameState): number | null {
+// plays on with Medium on every side for up to DEPTH turns and scores the result for
+// player me: 1 for a win, 0 for a loss, and in between by how far ahead they are on cards
+function playOut(state: GameState, me: number): number {
   let s = state
-  for (let turns = 0; s.winner === null && turns < 400; turns++) {
+  for (let turns = 0; s.winner === null && turns < DEPTH; turns++) {
     const move = hasPlays(s, s.current) ? mediumMove(s) : null
     s = move ? play(s, move) : noMove(s)
   }
-  return s.winner
+  if (s.winner !== null) return s.winner === me ? 1 : 0
+  const mine = cardsLeft(s.players[me])
+  const theirs = Math.min(...s.players.filter((_, i) => i !== me).map(cardsLeft))
+  return 0.5 + 0.5 * Math.tanh((theirs - mine) / SPREAD)
 }
 
-// Hard looks ahead once the deck is down to this many cards. Before then Medium's choices
-// are as good as lookahead in testing, and much faster.
-const ENDGAME_DECK = 4
-// guesses at the hidden cards per move; more is slower but stronger (24 wins about 70% of
-// games against Medium, 64 about 76%)
-const SAMPLES = 64
+// Hard looks ahead once the deck is down to this many cards. Earlier than that, Medium's
+// choices did as well in testing and are much faster.
+const ENDGAME_DECK = 10
+// guesses at the hidden cards per move
+const SAMPLES = 16
+// how many turns each guess is played on for, and how far ahead on cards counts as
+// nearly won when the game hasn't finished by then
+const DEPTH = 40
+const SPREAD = 6
 
 // the same card from the hand plays the same however many copies there are, and every
 // hidden card is equally unknown, so only one move of each kind needs to be weighed
@@ -148,7 +159,7 @@ function hardMove(state: GameState, rng: Rng): Source | null {
   for (let i = 0; i < SAMPLES; i++) {
     const world = determinize(state, me, rng)
     moves.forEach((move, j) => {
-      if (playOut(play(world, move)) === me) wins[j]++
+      wins[j] += playOut(play(world, move), me)
     })
   }
   let best = moves.indexOf(usual)

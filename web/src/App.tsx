@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { DIFFICULTIES, type Difficulty, computerTurn } from './ai'
 import { CardView, EmptySpot } from './CardView'
 import {
   type GameState,
+  type PileCard,
   type Player,
   type Source,
   cardLabel,
@@ -13,11 +14,13 @@ import {
   play,
   requirement,
 } from './game'
+import { Kaboom } from './Kaboom'
 import { WinCascade } from './WinCascade'
 import { MenuBar, MessageBox, StatusBar, TitleBar } from './Xp'
 
 const HUMAN = 0
 const COMPUTER_DELAY = 900
+const KABOOM_DURATION = 1100
 const DIFFICULTY_KEY = 'silly-biscuits-difficulty'
 
 const difficultyName = (d: Difficulty) => d[0].toUpperCase() + d.slice(1)
@@ -46,6 +49,8 @@ export default function App() {
   const [dialog, setDialog] = useState<Dialog>(null)
   const [celebrating, setCelebrating] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
+  // the cards flying out of an exploding pile, and how big the discard was before
+  const [kaboom, setKaboom] = useState<{ cards: PileCard[]; before: number } | null>(null)
 
   const deal = useCallback(() => {
     setGame(newGame())
@@ -74,14 +79,18 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [game, difficulty])
 
-  // you are stuck and the deck is empty: the game ends. Rejected clicks in the meantime
-  // must not restart the timer, so this only depends on whether you are stuck.
-  const humanOutOfMoves = humanStuck && game.deck.length === 0
+  // a 10 just blew the pile into the discard: play the explosion over the pile
+  const discardCount = game.discard.length
+  const seenDiscard = useRef(discardCount)
   useEffect(() => {
-    if (!humanOutOfMoves) return
-    const timer = setTimeout(() => setGame(noMove), COMPUTER_DELAY)
+    const before = seenDiscard.current
+    seenDiscard.current = discardCount
+    if (discardCount <= before) return
+    setKaboom({ cards: game.discard.slice(before).slice(-4), before })
+    const timer = setTimeout(() => setKaboom(null), prefersReducedMotion() ? 600 : KABOOM_DURATION)
     return () => clearTimeout(timer)
-  }, [humanOutOfMoves])
+    // only a growing discard matters, not every change to the game
+  }, [discardCount])
 
   // game over: celebrate a win, then offer another deal
   useEffect(() => {
@@ -116,7 +125,7 @@ export default function App() {
     setGame(next)
   }
 
-  const clickDeck = () => {
+  const pickUp = () => {
     if (!humanTurn) return
     if (humanStuck) setGame(noMove(game))
     else setGame({ ...game, error: 'You have a card you can play.' })
@@ -125,13 +134,15 @@ export default function App() {
   const you = game.players[HUMAN]
   const computer = game.players[1]
   const visiblePile = game.pile.slice(-4)
+  // the blown-up cards land on the discard once the explosion is over
+  const discardShown = kaboom ? game.discard.slice(0, kaboom.before) : game.discard
 
   let turnText = 'Your turn'
   if (game.winner !== null) turnText = 'Game over'
   else if (!humanTurn) turnText = 'Computer is thinking…'
 
   let status = game.error ?? game.message
-  if (!game.error && humanStuck && game.deck.length > 0) status = `${game.message} No playable cards: click the deck to draw.`
+  if (!game.error && humanStuck) status = `${game.message} You can't play: click the pile to pick it up.`
 
   return (
     <div className="desktop">
@@ -164,18 +175,13 @@ export default function App() {
           ]}
         />
 
-        <main className="felt">
+        <main className={`felt ${kaboom && !prefersReducedMotion() ? 'felt--shake' : ''}`}>
           <Seat player={computer} active={game.winner === null && game.current === 1} opponent />
 
           <section className="table-center" aria-label="Table">
             <div className="table-center__stack">
               {game.deck.length > 0 ? (
-                <CardView
-                  faceDown
-                  onClick={humanTurn ? clickDeck : undefined}
-                  className={`deck ${humanStuck ? 'deck--prompt' : ''}`}
-                  label={`Deck, ${game.deck.length} cards. ${humanStuck ? 'Click to draw.' : ''}`}
-                />
+                <CardView faceDown className="deck" label={`Deck, ${game.deck.length} cards`} />
               ) : (
                 <EmptySpot label="Empty" />
               )}
@@ -183,14 +189,44 @@ export default function App() {
             </div>
 
             <div className="table-center__stack">
-              <div className="pile" aria-label={`Pile, top card ${cardLabel(game.pile[game.pile.length - 1])}`}>
+              <div className="pile">
+                {visiblePile.length === 0 && <EmptySpot />}
                 {visiblePile.map((card, i) => (
                   <div className="pile__card" style={{ left: i * 16 }} key={card.id}>
                     <CardView card={card} />
                   </div>
                 ))}
+                {humanStuck && (
+                  <button
+                    type="button"
+                    className="pile__pick-up"
+                    onClick={pickUp}
+                    aria-label={`Pick up the pile, ${game.pile.length} cards`}
+                  />
+                )}
+                {kaboom && <Kaboom cards={kaboom.cards} key={discardCount} />}
               </div>
               <span className="felt-label">{requirement(game)}</span>
+            </div>
+
+            <div className="table-center__stack">
+              <div className={`discard ${discardShown.length ? 'discard--land' : ''}`} key={discardShown.length}>
+                {discardShown.length === 0 ? (
+                  <EmptySpot label="Discard" />
+                ) : (
+                  discardShown.slice(-3).map((card, i, shown) => (
+                    <div
+                      className="discard__card"
+                      style={{ transform: `rotate(${((card.id * 47) % 20) - 10}deg)` }}
+                      key={card.id}
+                      aria-hidden={i < shown.length - 1}
+                    >
+                      <CardView card={card} />
+                    </div>
+                  ))
+                )}
+              </div>
+              <span className="felt-label">Discard · {discardShown.length}</span>
             </div>
 
             <div className="direction" aria-label={`Direction: ${game.goingUp ? 'up' : 'down'}`}>
@@ -207,7 +243,7 @@ export default function App() {
             flash={flash}
           />
 
-          {celebrating && <WinCascade cards={game.pile} onDone={endCelebration} />}
+          {celebrating && <WinCascade cards={[...game.discard, ...game.pile]} onDone={endCelebration} />}
         </main>
 
         <StatusBar
@@ -231,14 +267,17 @@ export default function App() {
           </p>
           <p>
             <b>Special cards</b> can be played on anything: <b>2</b> reverses the direction, <b>8</b> resets the pile for
-            the next player, and <b>10</b> resets the pile and you go again.
+            the next player, and <b>10</b> blows the pile up into the discard and you go again.
           </p>
           <p>
             <b>Reserved cards</b> unlock once the deck is empty. Hidden cards unlock when the card on top is gone, and you
-            don't know what they are until you play them. If a hidden card can't be played, it's turned face up and you
-            lose your turn.
+            don't know what they are until you play them. If a hidden card can't be played, you pick it up along with the
+            pile.
           </p>
-          <p>If you can't play, click the deck to draw a card and lose your turn. Press F2 to deal a new game.</p>
+          <p>
+            If you can't play, click the pile to pick it all up, and you lose your turn. After each play you draw back up to
+            five cards while the deck lasts. Press F2 to deal a new game.
+          </p>
           <p>Choose how well the computer plays from the Game menu: Easy, Medium or Hard.</p>
         </MessageBox>
       )}
@@ -284,19 +323,21 @@ function Seat({ player, active, opponent, reservedLocked, onPlay, flash }: SeatP
   const hand = (
     <div className={`hand ${opponent ? 'hand--opponent' : ''}`} aria-label={`${player.name} hand`}>
       {player.hand.length === 0 && <EmptySpot />}
-      {player.hand.map((card) =>
-        opponent ? (
-          <CardView faceDown key={card.id} />
-        ) : (
-          <CardView
-            key={card.id}
-            card={card}
-            onClick={onPlay ? () => onPlay({ from: 'hand', cardId: card.id }) : undefined}
-            label={`Play ${cardLabel(card)} from hand`}
-            flash={flash === `hand-${card.id}`}
-          />
-        ),
-      )}
+      {/* each card sits in a slot that shrinks when the hand gets big, so the cards overlap more */}
+      {player.hand.map((card) => (
+        <div className="hand__slot" key={card.id}>
+          {opponent ? (
+            <CardView faceDown />
+          ) : (
+            <CardView
+              card={card}
+              onClick={onPlay ? () => onPlay({ from: 'hand', cardId: card.id }) : undefined}
+              label={`Play ${cardLabel(card)} from hand`}
+              flash={flash === `hand-${card.id}`}
+            />
+          )}
+        </div>
+      ))}
     </div>
   )
 

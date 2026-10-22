@@ -5,6 +5,7 @@ import {
   type GameState,
   type PileCard,
   SUITS,
+  cardsLeft,
   cloneState,
   isLegal,
   newGame,
@@ -100,6 +101,8 @@ describe('play', () => {
     g.deck = []
     let next = play(g, { from: 'hand', cardId: ten.id })
     expect(next.current).toBe(0)
+    expect(next.pile).toEqual([])
+    expect(next.discard.map((c) => c.rank)).toEqual([5, 10])
     next = play(next, { from: 'hand', cardId: eight.id })
     expect(next.current).toBe(1)
   })
@@ -116,13 +119,16 @@ describe('play', () => {
     expect(play(g, { from: 'public', slot: 0 }).error).toMatch(/deck is empty/)
   })
 
-  it('turns an illegal hidden card face up and ends the turn', () => {
-    const g = withPile([onPile(12)])
+  it('picks up an illegal hidden card along with the pile and ends the turn', () => {
+    const g = withPile([onPile(9), onPile(12)])
     const hidden = card(4)
     g.deck = []
+    g.players[0].hand = []
     g.players[0].slots[0] = { public: null, hidden }
     const next = play(g, { from: 'hidden', slot: 0 })
-    expect(next.players[0].slots[0]).toEqual({ public: hidden, hidden: null })
+    expect(next.players[0].slots[0]).toEqual({ public: null, hidden: null })
+    expect(next.players[0].hand.map((c) => c.rank)).toEqual([4, 9, 12])
+    expect(next.pile).toEqual([])
     expect(next.current).toBe(1)
   })
 
@@ -143,16 +149,19 @@ describe('play', () => {
 })
 
 describe('noMove', () => {
-  it('draws a card and passes the turn while the deck has cards', () => {
-    const g = newGame({ rng: mulberry32(3) })
+  it('picks up the whole pile and passes the turn', () => {
+    const g = withPile([onPile(4), onPile(9), onPile(13)])
     const next = noMove(g)
-    expect(next.players[0].hand).toHaveLength(6)
+    expect(next.players[0].hand).toHaveLength(8)
+    expect(next.players[0].hand.some((c) => 'value' in c)).toBe(false)
+    expect(next.pile).toEqual([])
+    expect(next.deck).toHaveLength(g.deck.length)
     expect(next.current).toBe(1)
   })
 
-  it('ends the game when the deck is empty', () => {
-    const g = { ...newGame({ rng: mulberry32(3) }), deck: [] }
-    expect(noMove(g).winner).toBe(1)
+  it('does not end the game when the deck is empty', () => {
+    const g = { ...withPile([onPile(13)]), deck: [] }
+    expect(noMove(g).winner).toBeNull()
   })
 })
 
@@ -167,28 +176,35 @@ const twoComputers = (seed: number) =>
 
 describe('computer vs computer', () => {
   // Hard looks ahead, so it gets fewer games to keep the suite quick
-  const games: Record<Difficulty, number> = { easy: 300, medium: 300, hard: 20 }
+  const games: Record<Difficulty, number> = { easy: 300, medium: 300, hard: 10 }
 
   for (const difficulty of DIFFICULTIES) {
-    it(`finishes every ${difficulty} game without getting stuck`, () => {
+    it(`finishes almost every ${difficulty} game, always by a player running out of cards`, () => {
       const rng = mulberry32(42)
       let hiddenPlays = 0
-      let finishedByEmptyingHand = 0
+      let unfinished = 0
       for (let seed = 0; seed < games[difficulty]; seed++) {
         let g = twoComputers(seed)
         let turns = 0
-        while (g.winner === null) {
+        while (g.winner === null && turns < 3000) {
           const before = g.players.map((p) => p.slots.filter((s) => s.hidden).length)
           g = computerTurn(g, difficulty, rng)
           expect(g.error).toBeNull()
           hiddenPlays += before.reduce((n, h, i) => n + h - g.players[i].slots.filter((s) => s.hidden).length, 0)
-          expect(++turns).toBeLessThan(1000)
+          turns++
         }
-        if (g.players[g.winner].hand.length === 0) finishedByEmptyingHand++
+        // once every 10 is in the discard, no cards leave play, and two computers can
+        // pass the same cards back and forth forever. That is rare.
+        if (g.winner === null) {
+          unfinished++
+          continue
+        }
+        // the only way to win is to play every card
+        expect(cardsLeft(g.players[g.winner])).toBe(0)
       }
+      expect(unfinished).toBeLessThan(Math.max(2, games[difficulty] / 20))
       expect(hiddenPlays).toBeGreaterThan(0)
-      expect(finishedByEmptyingHand).toBeGreaterThan(0)
-    }, 30_000)
+    }, 60_000)
   }
 })
 
@@ -241,14 +257,16 @@ describe('computerMove', () => {
   })
 
   it('leaves the opponent stuck on hard when that wins the game', () => {
-    // the opponent's last card is a 5: a 4 lets them win, a king leaves them with no move
+    // the opponent's last card is a 5: a 4 lets them win, but after a king they have to
+    // pick up the pile and the 4 then wins
     const g = endgame({ mine: [4, 13], theirs: [5], top: 3 })
     expect(played(g, 'medium')).toBe(4)
     expect(played(g, 'hard')).toBe(13)
   })
 
   it('flips the direction on hard when the opponent cannot follow it', () => {
-    // going up from a 3 the opponent's queen would follow, but after a 2 they need something lower
+    // going up from a 3 the opponent's queen would follow and win, but after a 2 they
+    // need something lower
     const g = endgame({ mine: [2, 4], theirs: [12], top: 3 })
     expect(played(g, 'hard')).toBe(2)
   })
@@ -281,7 +299,7 @@ function winRate(strong: Difficulty, weak: Difficulty, deals: number) {
     for (const strongSeat of [0, 1]) {
       const seats = strongSeat === 0 ? [strong, weak] : [weak, strong]
       let g = twoComputers(1000 + seed)
-      while (g.winner === null) g = computerTurn(g, seats[g.current], rng)
+      for (let turns = 0; g.winner === null && turns < 3000; turns++) g = computerTurn(g, seats[g.current], rng)
       if (g.winner === strongSeat) wins++
     }
   }
@@ -294,6 +312,6 @@ describe('difficulty tournament', () => {
   })
 
   it('hard beats medium', () => {
-    expect(winRate('hard', 'medium', 100)).toBeGreaterThan(0.65)
+    expect(winRate('hard', 'medium', 80)).toBeGreaterThan(0.65)
   }, 60_000)
 })

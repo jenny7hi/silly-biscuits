@@ -38,6 +38,8 @@ export interface GameState {
   players: Player[]
   deck: Card[]
   pile: PileCard[]
+  // cards blown off the pile by a 10
+  discard: PileCard[]
   goingUp: boolean
   current: number
   message: string
@@ -109,6 +111,7 @@ export function newGame({
     players: seated,
     deck,
     pile: [{ ...start, value: start.rank }],
+    discard: [],
     goingUp: start.rank !== 2,
     current: 0,
     message: `${seated[0].name === 'You' ? 'You go' : `${seated[0].name} goes`} first.`,
@@ -181,6 +184,7 @@ export function cloneState(state: GameState): GameState {
     players: state.players.map((p) => ({ ...p, hand: [...p.hand], slots: p.slots.map((s) => ({ ...s })) })),
     deck: [...state.deck],
     pile: [...state.pile],
+    discard: [...state.discard],
   }
 }
 
@@ -204,11 +208,13 @@ export function play(state: GameState, source: Source): GameState {
     if (source.from !== 'hidden') {
       return { ...s, error: `${cardLabel(card)} can't be played. ${requirement(s)}.` }
     }
-    // a hidden card that turns out to be illegal is made public and the turn is lost
-    const slot = p.slots[source.slot]
-    slot.hidden = null
-    slot.public = card
-    s.message = `${p.name} turned over a hidden ${cardLabel(card)}, but it can't be played. Turn lost.`
+    // a hidden card that turns out to be illegal goes into the hand along with the whole pile
+    p.slots[source.slot].hidden = null
+    const count = s.pile.length
+    p.hand.push(card, ...s.pile.map(({ id, rank, suit }) => ({ id, rank, suit })))
+    p.hand.sort(byRank)
+    s.pile = []
+    s.message = `${p.name} turned over a hidden ${cardLabel(card)}, but it can't be played, so ${p.name === 'You' ? 'you pick' : `${p.name} picks`} it up with ${count === 1 ? 'the card' : `all ${count} cards`} on the pile.`
     advance(s)
     return s
   }
@@ -238,7 +244,10 @@ export function play(state: GameState, source: Source): GameState {
     s.message = `${playedVerb(p)} ${label}. Pile reset: the next player can play anything.`
     advance(s)
   } else if (card.rank === 10) {
-    s.message = `${playedVerb(p)} ${label}. Pile reset: ${p.name === 'You' ? 'you go' : `${p.name} goes`} again.`
+    // a 10 blows the whole pile into the discard
+    s.discard.push(...s.pile)
+    s.pile = []
+    s.message = `${playedVerb(p)} ${label}. Kaboom! The pile is blown away and ${p.name === 'You' ? 'you go' : `${p.name} goes`} again.`
   } else {
     s.message = `${playedVerb(p)} ${label}.`
     advance(s)
@@ -246,23 +255,19 @@ export function play(state: GameState, source: Source): GameState {
   return s
 }
 
-// the current player has no legal play: draw a card and lose the turn. If the deck is
-// empty the game ends and the next player wins, as in the Python version.
+// the current player has no legal play: they pick up the whole pile and lose the turn.
+// The pile is then empty, so the next player can play anything.
 export function noMove(state: GameState): GameState {
   if (state.winner !== null) return state
   const s = cloneState(state)
   s.error = null
   const p = s.players[s.current]
-  if (s.deck.length > 0) {
-    p.hand.push(s.deck.shift()!)
-    p.hand.sort(byRank)
-    s.message = `${p.name} had no playable cards, drew one, and lost the turn.`
-    advance(s)
-    return s
-  }
+  const count = s.pile.length
+  p.hand.push(...s.pile.map(({ id, rank, suit }) => ({ id, rank, suit })))
+  p.hand.sort(byRank)
+  s.pile = []
+  s.message = `${p.name} couldn't play and picked up ${count === 1 ? 'the card' : `all ${count} cards`} on the pile.`
   advance(s)
-  s.winner = s.current
-  s.message = `${p.name} ${p.name === 'You' ? 'have' : 'has'} no playable cards left. ${s.players[s.current].name} ${s.players[s.current].name === 'You' ? 'win' : 'wins'}!`
   return s
 }
 
