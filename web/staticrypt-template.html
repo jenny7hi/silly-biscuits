@@ -19,7 +19,7 @@
         --xp-face-dark: #aca899;
         --felt: #008000;
         --felt-dark: #006400;
-        --card-red: #e00000;
+        --card-red: #d42a1e;
         --ui-font: Tahoma, 'Segoe UI', Verdana, sans-serif;
         color-scheme: light;
       }
@@ -37,6 +37,8 @@
       body {
         font: 11px/1.4 var(--ui-font);
         color: #000;
+        -webkit-font-smoothing: none;
+        font-smooth: never;
         background:
           radial-gradient(ellipse 70% 40% at 25% 105%, #5a9e2e 0 60%, transparent 61%),
           radial-gradient(ellipse 80% 45% at 85% 110%, #4a8f22 0 60%, transparent 61%),
@@ -61,7 +63,6 @@
       .loading {
         color: #fff;
         font-size: 13px;
-        text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5);
       }
 
       /* ---------- window ---------- */
@@ -133,15 +134,13 @@
         background: #fff;
       }
 
-      .titlebar__icon i + i::after {
-        content: '♥';
+      .titlebar__icon-suit {
         position: absolute;
-        inset: -2px 0 0;
-        color: var(--card-red);
-        font-style: normal;
-        font-size: 8px;
-        text-align: center;
-        text-shadow: none;
+        left: 1px;
+        top: 2px;
+        width: 5px;
+        height: 5px;
+        color: #d42a1e;
       }
 
       .titlebar__buttons {
@@ -253,7 +252,7 @@
         right: 0;
         bottom: 13px;
         color: #ffd23f;
-        font: 900 10px/1 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+        font: bold 10px/1 KaiTi, 'Kaiti SC', STKaiti, serif;
         text-align: center;
         -webkit-text-stroke: 1px #6e0a06;
         paint-order: stroke fill;
@@ -282,12 +281,22 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        font: 24px Georgia, serif;
+      }
+
+      .card__corner-suit {
+        display: block;
+        width: 8px;
+        height: 8px;
+        margin: 1px auto 0;
+      }
+
+      .card__pip-suit {
+        width: 22px;
+        height: 22px;
       }
 
       .banner__title {
         color: #fff;
-        text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.55);
       }
 
       .banner__title h1 {
@@ -402,7 +411,7 @@
         position: absolute;
         right: 22px;
         top: 136px;
-        font: 900 52px/1 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+        font: bold 52px/1 SimHei, 'STHeiti', 'Heiti SC', sans-serif;
         color: #e00000;
         -webkit-text-stroke: 3px #fff;
         paint-order: stroke fill;
@@ -412,34 +421,33 @@
       }
 
       .wrong--show {
-        animation: stamp 1.2s ease-out both;
+        animation: stamp 1.2s steps(2, jump-end) both;
       }
 
       @keyframes stamp {
         0% {
-          transform: rotate(-30deg) scale(2.6);
-          opacity: 0;
-        }
-        16% {
-          transform: rotate(-12deg) scale(0.92);
+          transform: rotate(-20deg) scale(2.2);
           opacity: 1;
         }
+        16% {
+          transform: rotate(-12deg) scale(0.95);
+        }
         26% {
-          transform: rotate(-6deg) scale(1.08);
+          transform: rotate(-9deg) scale(1.05);
         }
         36%,
-        75% {
+        80% {
           transform: rotate(-12deg) scale(1);
           opacity: 1;
         }
         100% {
-          transform: rotate(-12deg) scale(1) translateY(-14px);
+          transform: rotate(-12deg) scale(1);
           opacity: 0;
         }
       }
 
       .window--shake {
-        animation: shake 0.35s linear;
+        animation: shake 0.35s steps(1, end);
       }
 
       @keyframes shake {
@@ -494,7 +502,7 @@
     <div id="staticrypt_content" class="desktop hidden">
       <div class="window" id="window" role="dialog" aria-labelledby="dialog-title">
         <div class="titlebar">
-          <span class="titlebar__icon" aria-hidden="true"><i></i><i></i></span>
+          <span class="titlebar__icon" aria-hidden="true"><i></i><i><svg class="titlebar__icon-suit" viewBox="0 0 100 100"><path d="M50 90C31 73 5 58 5 33C5 17 17 6 31 6C40 6 46 11 50 19C54 11 60 6 69 6C83 6 95 17 95 33C95 58 69 73 50 90Z" fill="currentColor" /></svg></i></span>
           <span class="titlebar__title" id="dialog-title">Log On to /*[|template_title|]*/0</span>
           <span class="titlebar__buttons" aria-hidden="true">
             <span class="xp-button xp-button--help"></span>
@@ -506,10 +514,10 @@
           <div class="fan">
             <div class="card card--back"></div>
             <div class="card card--one">
-              <span class="card__corner">A<br />♠</span><span class="card__pip">♠</span>
+              <span class="card__corner">A<svg class="card__corner-suit" viewBox="0 0 100 100"><path d="M50 4C64 24 92 39 92 61C92 75 81 83 69 83C61 83 55 79 52 73C53 83 57 90 67 96H33C43 90 47 83 48 73C45 79 39 83 31 83C19 83 8 75 8 61C8 39 36 24 50 4Z" fill="currentColor" /></svg></span><span class="card__pip"><svg class="card__pip-suit" viewBox="0 0 100 100"><path d="M50 4C64 24 92 39 92 61C92 75 81 83 69 83C61 83 55 79 52 73C53 83 57 90 67 96H33C43 90 47 83 48 73C45 79 39 83 31 83C19 83 8 75 8 61C8 39 36 24 50 4Z" fill="currentColor" /></svg></span>
             </div>
             <div class="card card--two">
-              <span class="card__corner">10<br />♥</span><span class="card__pip">♥</span>
+              <span class="card__corner">10<svg class="card__corner-suit" viewBox="0 0 100 100"><path d="M50 90C31 73 5 58 5 33C5 17 17 6 31 6C40 6 46 11 50 19C54 11 60 6 69 6C83 6 95 17 95 33C95 58 69 73 50 90Z" fill="currentColor" /></svg></span><span class="card__pip"><svg class="card__pip-suit" viewBox="0 0 100 100"><path d="M50 90C31 73 5 58 5 33C5 17 17 6 31 6C40 6 46 11 50 19C54 11 60 6 69 6C83 6 95 17 95 33C95 58 69 73 50 90Z" fill="currentColor" /></svg></span>
             </div>
           </div>
           <div class="banner__title">

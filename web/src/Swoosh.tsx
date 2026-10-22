@@ -22,31 +22,59 @@ export interface SwooshAnimation {
   hiddenIds: Set<number>
 }
 
+// All motion here is deliberately choppy, like a game from the Windows XP days: cards jump
+// between a handful of frames (about 14 a second) instead of easing smoothly, never fade,
+// and flip by squashing flat and springing back as the other side, with no 3D.
+const FRAME = 70
+export const frames = (ms: number) => Math.max(2, Math.round(ms / FRAME))
+
+// an old-school card flip. `from: 'back'` turns a face-down card face up; `from: 'front'`
+// flips a face-up card over and back again, so it still lands face up.
+export function RetroFlip({ card, from, duration, delay }: { card: Card; from: 'back' | 'front'; duration: number; delay: number }) {
+  const half = frames(duration / 2)
+  const squash = `retro-squash ${duration}ms steps(${half}, jump-none) ${delay}ms both`
+  return (
+    <div className="retro-flip" style={{ animation: squash }}>
+      {from === 'back' ? (
+        <>
+          <div className="retro-flip__face" style={{ animation: `retro-second-half ${duration}ms step-end ${delay}ms both` }}>
+            <CardView card={card} />
+          </div>
+          <div className="retro-flip__face" style={{ animation: `retro-first-half ${duration}ms step-end ${delay}ms both` }}>
+            <CardView faceDown />
+          </div>
+        </>
+      ) : (
+        <CardView card={card} />
+      )}
+    </div>
+  )
+}
+
 // how long a failed flip sits on the table, stamped 错！, before it swooshes away
 export const WRONG_HOLD = 750
-const SWOOSH = 520
-const STAGGER = 55
-// faded copies that follow each card a moment behind, as a motion trail
-const TRAIL = [0, 45, 90]
+const SWOOSH = 490
+const STAGGER = FRAME
+// solid copies a frame or two behind each card, like the trails in Solitaire's win cascade
+const TRAIL = [0, FRAME, FRAME * 2]
 
 export function swooshDuration(cardCount: number, flipped: boolean) {
   return (flipped ? WRONG_HOLD : 0) + SWOOSH + cardCount * STAGGER + TRAIL[TRAIL.length - 1] + 60
 }
 
 // `appearAt` keeps a card invisible until then (the failed hidden card waits for its reveal)
-function flying(card: Card, from: Point, to: Point, delay: number, key: string, ghost: number, appearAt?: number) {
-  const animations = [`swoosh ${SWOOSH}ms cubic-bezier(0.55, 0, 0.8, 0.35) ${delay}ms both`]
+function flying(card: Card, from: Point, to: Point, delay: number, key: string, appearAt?: number) {
+  const animations = [`swoosh ${SWOOSH}ms steps(${frames(SWOOSH)}, jump-end) ${delay}ms both`]
   if (appearAt !== undefined) animations.push(`swoosh-appear 0s linear ${appearAt}ms both`)
   const style = {
     left: from.x,
     top: from.y,
     '--dx': `${to.x - from.x}px`,
     '--dy': `${to.y - from.y}px`,
-    '--rot': `${((card.id * 37) % 50) - 25}deg`,
     animation: animations.join(', '),
   } as CSSProperties
   return (
-    <div className={`swoosh__card ${ghost ? `swoosh__card--ghost-${ghost}` : ''}`} style={style} key={key}>
+    <div className="swoosh__card" style={style} key={key}>
       <CardView card={card} />
     </div>
   )
@@ -66,17 +94,9 @@ export function Swoosh({ animation }: { animation: SwooshAnimation }) {
   return (
     <div className="swoosh" aria-hidden="true">
       {/* later trail copies first, so the leading card is drawn on top */}
-      {[...TRAIL].reverse().map((lag, ghost) =>
+      {[...TRAIL].reverse().map((lag) =>
         movers.map(({ card, from, late }, i) =>
-          flying(
-            card,
-            from,
-            hand,
-            start + i * STAGGER + lag,
-            `${card.id}-${lag}`,
-            TRAIL.length - 1 - ghost,
-            late ? start : undefined,
-          ),
+          flying(card, from, hand, start + i * STAGGER + lag, `${card.id}-${lag}`, late ? start : undefined),
         ),
       )}
       {flipped && flippedAt && (
@@ -85,7 +105,7 @@ export function Swoosh({ animation }: { animation: SwooshAnimation }) {
             className="swoosh__reveal"
             style={{ left: flippedAt.x, top: flippedAt.y, '--hold': `${WRONG_HOLD}ms` } as CSSProperties}
           >
-            <CardView card={flipped} />
+            <RetroFlip card={flipped} from="back" duration={280} delay={0} />
           </div>
           <span className="swoosh__wrong" lang="zh" style={{ left: flippedAt.x, top: flippedAt.y }}>
             错！
@@ -130,22 +150,11 @@ export function Deal({ animation }: { animation: DealAnimation }) {
           top: deck.y,
           '--dx': `${hand.x - deck.x + i * 18}px`,
           '--dy': `${hand.y - deck.y}px`,
-          animation: `deal ${DEAL_FLIGHT}ms cubic-bezier(0.25, 0.8, 0.35, 1) ${delay}ms both`,
+          animation: `deal ${DEAL_FLIGHT}ms steps(${frames(DEAL_FLIGHT)}, jump-end) ${delay}ms both`,
         } as CSSProperties
         return (
           <div className="deal__card" style={style} key={card.id}>
-            {reveal ? (
-              <div className="deal__flipper" style={{ animation: `deal-flip ${DEAL_FLIGHT}ms ease-in-out ${delay}ms both` }}>
-                <div className="deal__face">
-                  <CardView card={card} />
-                </div>
-                <div className="deal__face deal__face--back">
-                  <CardView faceDown />
-                </div>
-              </div>
-            ) : (
-              <CardView faceDown />
-            )}
+            {reveal ? <RetroFlip card={card} from="back" duration={DEAL_FLIGHT} delay={delay} /> : <CardView faceDown />}
           </div>
         )
       })}
@@ -164,7 +173,7 @@ export interface PlayFlightAnimation {
 
 export const PLAY_FLIGHT = 430
 
-// a played card flips out of the hand and arcs onto the pile
+// a played card flips out of the hand and hops onto the pile
 export function PlayFlight({ animation }: { animation: PlayFlightAnimation }) {
   const { card, from, to, faceDown } = animation
   const style = {
@@ -172,23 +181,13 @@ export function PlayFlight({ animation }: { animation: PlayFlightAnimation }) {
     top: from.y,
     '--dx': `${to.x - from.x}px`,
     '--dy': `${to.y - from.y}px`,
-    animation: `play-arc ${PLAY_FLIGHT}ms ease-in-out both`,
-  } as CSSProperties
-  const flip = {
-    '--flip-from': faceDown ? '180deg' : '0deg',
-    animation: `play-flip ${PLAY_FLIGHT}ms ease-in-out both`,
+    // two legs (up, then down onto the pile), each a few frames
+    animation: `play-arc ${PLAY_FLIGHT}ms steps(${frames(PLAY_FLIGHT / 2)}, jump-end) both`,
   } as CSSProperties
   return (
     <div className="swoosh" aria-hidden="true">
       <div className="deal__card play__card" style={style}>
-        <div className="deal__flipper" style={flip}>
-          <div className="deal__face">
-            <CardView card={card} />
-          </div>
-          <div className="deal__face deal__face--back">
-            <CardView faceDown />
-          </div>
-        </div>
+        <RetroFlip card={card} from={faceDown ? 'back' : 'front'} duration={PLAY_FLIGHT} delay={0} />
       </div>
     </div>
   )

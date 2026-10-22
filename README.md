@@ -17,8 +17,8 @@ Click a card to play it and press F2 to deal a new game. Run `npm test` in the `
 To publish it as one self-contained page (for example, to encrypt it with StatiCrypt), run `npm run build:single`, which writes `web/dist/single/index.html` with the JS and CSS inlined. `web/staticrypt-template.html` is a StatiCrypt password page styled like the game; pass it with `-t`.
 
 The browser version differs from the terminal version in two ways:
-- If you can't play, you pick up the whole pile (click it) and lose your turn, instead of drawing a card. Being stuck never ends the game: you win by playing all your cards.
-- If a hidden card you flip can't be played, you pick it up along with the whole pile, instead of it being turned face up.
+- If you can't play, you pick up the whole pile (click it), instead of drawing a card, and then start the empty pile with any card. Being stuck never ends the game: you win by playing all your cards.
+- If a hidden card you flip can't be played, you pick it up along with the whole pile, instead of it being turned face up, and then play again.
 - A 10 blows the pile up (轰！) into a discard pile, taking those cards out of the game.
 - Cards animate as they move: drawn cards fly from the deck into your hand, and a picked-up pile swooshes into the picker's hand. A failed hidden flip is stamped 错！ ("wrong!") first.
 

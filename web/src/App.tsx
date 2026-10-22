@@ -425,11 +425,11 @@ export default function App() {
           <p>
             <b>Reserved cards</b> unlock once the deck is empty. Hidden cards unlock when the card on top is gone, and you
             don't know what they are until you play them. If a hidden card can't be played, you pick it up along with the
-            pile.
+            pile, then play again.
           </p>
           <p>
-            If you can't play, click the pile to pick it all up, and you lose your turn. After each play you draw back up to
-            five cards while the deck lasts. Press F2 to deal a new game.
+            If you can't play, click the pile to pick it all up, then start the empty pile with any card. After each play
+            you draw back up to five cards while the deck lasts. Press F2 to deal a new game.
           </p>
           <p>Choose how well the computer plays from the Game menu: Easy, Medium or Hard.</p>
         </MessageBox>

@@ -120,7 +120,7 @@ describe('play', () => {
     expect(play(g, { from: 'public', slot: 0 }).error).toMatch(/deck is empty/)
   })
 
-  it('picks up an illegal hidden card along with the pile and ends the turn', () => {
+  it('picks up an illegal hidden card along with the pile, then plays again', () => {
     const g = withPile([onPile(9), onPile(12)])
     const hidden = card(4)
     g.deck = []
@@ -131,7 +131,7 @@ describe('play', () => {
     expect(next.players[0].hand.map((c) => c.rank)).toEqual([4, 9, 12])
     expect(next.pickup).toMatchObject({ player: 0, flipped: hidden, slot: 0 })
     expect(next.pile).toEqual([])
-    expect(next.current).toBe(1)
+    expect(next.current).toBe(0)
   })
 
   it('refills the hand to five from the deck', () => {
@@ -152,14 +152,14 @@ describe('play', () => {
 })
 
 describe('noMove', () => {
-  it('picks up the whole pile and passes the turn', () => {
+  it('picks up the whole pile, then plays again', () => {
     const g = withPile([onPile(4), onPile(9), onPile(13)])
     const next = noMove(g)
     expect(next.players[0].hand).toHaveLength(8)
     expect(next.players[0].hand.some((c) => 'value' in c)).toBe(false)
     expect(next.pile).toEqual([])
     expect(next.deck).toHaveLength(g.deck.length)
-    expect(next.current).toBe(1)
+    expect(next.current).toBe(0)
     expect(next.pickup).toMatchObject({ id: 1, player: 0, flipped: null })
     expect(next.pickup?.cards.map((c) => c.rank)).toEqual([4, 9, 13])
   })
@@ -180,8 +180,10 @@ const twoComputers = (seed: number) =>
   })
 
 describe('computer vs computer', () => {
-  // Hard looks ahead, so it gets fewer games to keep the suite quick
+  // Hard looks ahead, so it gets fewer games to keep the suite quick. Easy plays at random,
+  // so its games can run long before someone gets lucky.
   const games: Record<Difficulty, number> = { easy: 300, medium: 300, hard: 6 }
+  const maxTurns: Record<Difficulty, number> = { easy: 10_000, medium: 3000, hard: 3000 }
 
   for (const difficulty of DIFFICULTIES) {
     it(`finishes almost every ${difficulty} game, always by a player running out of cards`, () => {
@@ -191,7 +193,7 @@ describe('computer vs computer', () => {
       for (let seed = 0; seed < games[difficulty]; seed++) {
         let g = twoComputers(seed)
         let turns = 0
-        while (g.winner === null && turns < 3000) {
+        while (g.winner === null && turns < maxTurns[difficulty]) {
           const before = g.players.map((p) => p.slots.filter((s) => s.hidden).length)
           g = computerTurn(g, difficulty, rng)
           expect(g.error).toBeNull()
@@ -199,7 +201,8 @@ describe('computer vs computer', () => {
           turns++
         }
         // once every 10 is in the discard, no cards leave play, and two computers can
-        // pass the same cards back and forth forever. That is rare.
+        // pass the same cards back and forth forever (about 11 in 300 games for Medium
+        // since the player who picks up leads the next pile). A person breaks the loop.
         if (g.winner === null) {
           unfinished++
           continue
@@ -207,7 +210,7 @@ describe('computer vs computer', () => {
         // the only way to win is to play every card
         expect(cardsLeft(g.players[g.winner])).toBe(0)
       }
-      expect(unfinished).toBeLessThan(Math.max(2, games[difficulty] / 20))
+      expect(unfinished).toBeLessThan(Math.max(2, games[difficulty] / 15))
       expect(hiddenPlays).toBeGreaterThan(0)
     }, 60_000)
   }
