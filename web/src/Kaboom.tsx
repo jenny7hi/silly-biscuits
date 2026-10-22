@@ -35,7 +35,7 @@ export function Kaboom({ cards, delay = 0, landing }: { cards: PileCard[]; delay
           <polygon points={BURST_POINTS} className="kaboom__burst-outer" />
           <circle cx="50" cy="50" r="22" className="kaboom__burst-inner" />
         </svg>
-        <span className="kaboom__text" lang="zh">
+        <span className="kaboom__text" lang="zh-Hans">
           轰！
         </span>
       </div>

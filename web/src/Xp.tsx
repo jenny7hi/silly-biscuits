@@ -33,6 +33,8 @@ export interface MenuItem {
   separator?: boolean
   // shows a check mark, for one of a set of options
   checked?: boolean
+  // shown on the right, where a shortcut would go
+  detail?: ReactNode
 }
 
 export function MenuBar({ menus }: { menus: { label: string; items: MenuItem[] }[] }) {
@@ -94,6 +96,7 @@ export function MenuBar({ menus }: { menus: { label: string; items: MenuItem[] }
                     )}
                     <span>{item.label}</span>
                     {item.shortcut && <span className="xp-menu__shortcut">{item.shortcut}</span>}
+                    {item.detail && <span className="xp-menu__detail">{item.detail}</span>}
                   </button>
                 ),
               )}
@@ -129,12 +132,14 @@ export interface DialogButton {
 export function MessageBox({
   title,
   icon = 'info',
+  className = '',
   children,
   buttons,
   onClose,
 }: {
   title: string
   icon?: 'info' | 'question' | null
+  className?: string
   children: ReactNode
   buttons: DialogButton[]
   onClose: () => void
@@ -149,7 +154,7 @@ export function MessageBox({
 
   return (
     <div className="xp-dialog-backdrop">
-      <div className="xp-window xp-dialog" role="dialog" aria-modal="true" aria-label={title}>
+      <div className={`xp-window xp-dialog ${className}`} role="dialog" aria-modal="true" aria-label={title}>
         <div className="xp-titlebar xp-titlebar--small">
           <span className="xp-titlebar__title">{title}</span>
           <span className="xp-titlebar__buttons">

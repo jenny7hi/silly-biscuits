@@ -144,7 +144,7 @@ export function Swoosh({ animation }: { animation: SwooshAnimation }) {
           >
             <RetroFlip card={flipped} from="back" to="front" duration={320} delay={0} />
           </div>
-          <span className="swoosh__wrong" lang="zh" style={{ left: flippedAt.x, top: flippedAt.y }}>
+          <span className="swoosh__wrong" lang="zh-Hans" style={{ left: flippedAt.x, top: flippedAt.y }}>
             错！
           </span>
         </>
