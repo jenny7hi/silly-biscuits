@@ -1,5 +1,6 @@
 import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { DIFFICULTIES, type Difficulty, computerTurn } from './ai'
+import { BiscuitName, DifficultyDialog } from './Biscuits'
 import { CardView, EmptySpot } from './CardView'
 import {
   type Card,
@@ -36,19 +37,25 @@ const COMPUTER_DELAY = 900
 const KABOOM_DURATION = 1100
 const DIFFICULTY_KEY = 'silly-biscuits-difficulty'
 
-const difficultyName = (d: Difficulty) => d[0].toUpperCase() + d.slice(1)
-
-function savedDifficulty(): Difficulty {
+function savedDifficulty(): Difficulty | null {
   try {
     const saved = localStorage.getItem(DIFFICULTY_KEY)
     if (DIFFICULTIES.includes(saved as Difficulty)) return saved as Difficulty
   } catch {
     // storage can be unavailable, e.g. in a private window
   }
-  return 'medium'
+  return null
 }
 
-type Dialog = 'rules' | 'about' | 'gameOver' | null
+function rememberDifficulty(d: Difficulty) {
+  try {
+    localStorage.setItem(DIFFICULTY_KEY, d)
+  } catch {
+    // the choice just won't be remembered
+  }
+}
+
+type Dialog = 'difficulty' | 'rules' | 'about' | 'gameOver' | null
 
 const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
@@ -58,8 +65,9 @@ function sourceKey(source: Source) {
 
 export default function App() {
   const [game, setGame] = useState<GameState>(() => newGame())
-  const [difficulty, setDifficulty] = useState<Difficulty>(savedDifficulty)
-  const [dialog, setDialog] = useState<Dialog>(null)
+  const [difficulty, setDifficulty] = useState<Difficulty>(() => savedDifficulty() ?? 'medium')
+  // the first time the game is opened, ask which biscuit to play against
+  const [dialog, setDialog] = useState<Dialog>(() => (savedDifficulty() ? null : 'difficulty'))
   const [celebrating, setCelebrating] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
   // the cards flying out of an exploding pile, and how big the discard was before
@@ -79,15 +87,18 @@ export default function App() {
   }, [])
 
   const chooseDifficulty = (d: Difficulty) => {
+    rememberDifficulty(d)
+    setDialog(null)
     if (d === difficulty) return
     setDifficulty(d)
-    try {
-      localStorage.setItem(DIFFICULTY_KEY, d)
-    } catch {
-      // the choice just won't be remembered
-    }
     deal()
   }
+
+  // closing the biscuit picker keeps the current one, and stops it popping up next time
+  const closeDifficulty = useCallback(() => {
+    rememberDifficulty(difficulty)
+    setDialog(null)
+  }, [difficulty])
 
   const humanTurn = game.winner === null && game.current === HUMAN
   const humanStuck = humanTurn && !hasPlays(game, HUMAN)
@@ -303,11 +314,11 @@ export default function App() {
               items: [
                 { label: 'Deal', shortcut: 'F2', onSelect: deal },
                 { label: '', separator: true },
-                ...DIFFICULTIES.map((d) => ({
-                  label: difficultyName(d),
-                  checked: d === difficulty,
-                  onSelect: () => chooseDifficulty(d),
-                })),
+                {
+                  label: 'Difficulty…',
+                  detail: <BiscuitName difficulty={difficulty} />,
+                  onSelect: () => setDialog('difficulty'),
+                },
                 { label: '', separator: true },
                 { label: 'Rules…', onSelect: () => setDialog('rules') },
               ],
@@ -415,11 +426,15 @@ export default function App() {
           panels={[
             { content: status, grow: true, live: true },
             { content: turnText },
-            { content: difficultyName(difficulty) },
+            { content: <BiscuitName difficulty={difficulty} inline /> },
             { content: `Cards left: ${cardsLeft(you)} vs ${cardsLeft(computer)}` },
           ]}
         />
       </div>
+
+      {dialog === 'difficulty' && (
+        <DifficultyDialog current={difficulty} onChoose={chooseDifficulty} onClose={closeDifficulty} />
+      )}
 
       {dialog === 'rules' && (
         <MessageBox title="How to Play" onClose={() => setDialog(null)} buttons={[{ label: 'OK', onClick: () => setDialog(null) }]}>
@@ -443,7 +458,10 @@ export default function App() {
             If you can't play, click the pile to pick it all up, then start the empty pile with any card. After each play
             you draw back up to five cards while the deck lasts. Press F2 to deal a new game.
           </p>
-          <p>Choose how well the computer plays from the Game menu: Easy, Medium or Hard.</p>
+          <p>
+            Choose how well the computer plays from Game, Difficulty: Soggy is easy, Crumbly is in between, and
+            Crunchy is hard.
+          </p>
         </MessageBox>
       )}
 
