@@ -47,6 +47,17 @@ export interface Pickup {
 }
 
 // the last time someone drew from the deck after a play, so the UI can animate it
+// the last card played onto the pile, so the UI can animate it
+export interface LastPlay {
+  id: number
+  player: number
+  card: Card
+  from: Source['from']
+  slot: number | null
+  // how many cards were on the pile once it landed (a 10 then blows them away)
+  pileSize: number
+}
+
 export interface Draw {
   id: number
   player: number
@@ -67,6 +78,7 @@ export interface GameState {
   winner: number | null
   pickup: Pickup | null
   draw: Draw | null
+  lastPlay: LastPlay | null
 }
 
 export const HAND_SIZE = 5
@@ -140,6 +152,7 @@ export function newGame({
     winner: null,
     pickup: null,
     draw: null,
+    lastPlay: null,
   }
 }
 
@@ -244,6 +257,14 @@ export function play(state: GameState, source: Source): GameState {
 
   const value = card.rank === 1 ? (s.goingUp ? 14 : 1) : card.rank
   s.pile.push({ ...card, value })
+  s.lastPlay = {
+    id: (s.lastPlay?.id ?? 0) + 1,
+    player: s.current,
+    card,
+    from: source.from,
+    slot: source.from === 'hand' ? null : source.slot,
+    pileSize: s.pile.length,
+  }
 
   const drawn: Card[] = []
   while (p.hand.length + drawn.length < HAND_SIZE && s.deck.length > 0) drawn.push(s.deck.shift()!)

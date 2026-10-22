@@ -108,8 +108,8 @@ export interface DealAnimation {
   hiddenIds: Set<number>
 }
 
-// leave the played card a moment to land before the draw starts
-const DEAL_DELAY = 140
+// let the played card fly out first, then draw
+const DEAL_DELAY = 300
 const DEAL_FLIGHT = 420
 const DEAL_STAGGER = 110
 
@@ -149,6 +149,47 @@ export function Deal({ animation }: { animation: DealAnimation }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+export interface PlayFlightAnimation {
+  id: number
+  card: Card
+  from: Point
+  to: Point
+  // cards from the computer's hand or a hidden slot start face down and flip face up
+  faceDown: boolean
+}
+
+export const PLAY_FLIGHT = 430
+
+// a played card flips out of the hand and arcs onto the pile
+export function PlayFlight({ animation }: { animation: PlayFlightAnimation }) {
+  const { card, from, to, faceDown } = animation
+  const style = {
+    left: from.x,
+    top: from.y,
+    '--dx': `${to.x - from.x}px`,
+    '--dy': `${to.y - from.y}px`,
+    animation: `play-arc ${PLAY_FLIGHT}ms ease-in-out both`,
+  } as CSSProperties
+  const flip = {
+    '--flip-from': faceDown ? '180deg' : '0deg',
+    animation: `play-flip ${PLAY_FLIGHT}ms ease-in-out both`,
+  } as CSSProperties
+  return (
+    <div className="swoosh" aria-hidden="true">
+      <div className="deal__card play__card" style={style}>
+        <div className="deal__flipper" style={flip}>
+          <div className="deal__face">
+            <CardView card={card} />
+          </div>
+          <div className="deal__face deal__face--back">
+            <CardView faceDown />
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

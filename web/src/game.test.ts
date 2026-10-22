@@ -100,6 +100,7 @@ describe('play', () => {
     expect(next.current).toBe(0)
     expect(next.pile).toEqual([])
     expect(next.discard.map((c) => c.rank)).toEqual([5, 10])
+    expect(next.lastPlay).toMatchObject({ id: 1, player: 0, card: ten, from: 'hand', slot: null, pileSize: 2 })
     next = play(next, { from: 'hand', cardId: eight.id })
     expect(next.current).toBe(1)
   })

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { CardView, EmptySpot } from './CardView'
 import {
   type GameState,
@@ -18,6 +18,9 @@ import { Kaboom } from './Kaboom'
 import {
   Deal,
   type DealAnimation,
+  PLAY_FLIGHT,
+  PlayFlight,
+  type PlayFlightAnimation,
   type Point,
   Swoosh,
   type SwooshAnimation,
@@ -45,7 +48,11 @@ export default function App() {
   const [celebrating, setCelebrating] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
   // the cards flying out of an exploding pile, and how big the discard was before
-  const [kaboom, setKaboom] = useState<{ cards: PileCard[]; before: number } | null>(null)
+  // `delay` lets a 10 land before it explodes; `landing` is that 10
+  const [kaboom, setKaboom] = useState<{ cards: PileCard[]; before: number; delay: number; landing?: number } | null>(
+    null,
+  )
+  const [flight, setFlight] = useState<PlayFlightAnimation | null>(null)
   const [swoosh, setSwoosh] = useState<SwooshAnimation | null>(null)
   const [drawing, setDrawing] = useState<DealAnimation | null>(null)
   const feltRef = useRef<HTMLElement>(null)
@@ -129,6 +136,52 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [drawing])
 
+  // a card was played: fly it from where it was onto the pile. Where it was comes from the
+  // positions recorded after the previous render, since it has already left the hand.
+  const cardPositions = useRef(new Map<number, Point>())
+  const seenPlay = useRef(game.lastPlay?.id)
+  useLayoutEffect(() => {
+    const played = game.lastPlay
+    if (!played || played.id === seenPlay.current) return
+    seenPlay.current = played.id
+    const felt = feltRef.current
+    if (!felt || prefersReducedMotion()) return
+    const origin = felt.getBoundingClientRect()
+    let from = cardPositions.current.get(played.card.id) ?? null
+    if (played.from === 'hidden') {
+      const slot = felt.querySelector(`[data-seat="${played.player}"][data-slot="${played.slot}"]`)?.getBoundingClientRect()
+      from = slot ? { x: slot.left - origin.left, y: slot.top - origin.top } : null
+    }
+    const pile = felt.querySelector('.pile')?.getBoundingClientRect()
+    if (!from || !pile) return
+    setFlight({
+      id: played.id,
+      card: played.card,
+      from,
+      to: { x: pile.left - origin.left + (Math.min(played.pileSize, 4) - 1) * 16, y: pile.top - origin.top },
+      faceDown: played.from === 'hidden' || (played.from === 'hand' && game.players[played.player].isComputer),
+    })
+  }, [game.lastPlay])
+
+  useEffect(() => {
+    if (!flight) return
+    const timer = setTimeout(() => setFlight(null), PLAY_FLIGHT)
+    return () => clearTimeout(timer)
+  }, [flight])
+
+  // after every render, note where each card in a hand or reserved slot sits on the felt
+  useLayoutEffect(() => {
+    const felt = feltRef.current
+    if (!felt) return
+    const origin = felt.getBoundingClientRect()
+    const positions = new Map<number, Point>()
+    felt.querySelectorAll<HTMLElement>('[data-card-id]').forEach((el) => {
+      const rect = el.getBoundingClientRect()
+      positions.set(Number(el.dataset.cardId), { x: rect.left - origin.left, y: rect.top - origin.top })
+    })
+    cardPositions.current = positions
+  })
+
   // in development, expose the game so animations can be checked from the console
   useEffect(() => {
     if (import.meta.env.DEV) Object.assign(window, { __silly: { game, setGame, play, noMove } })
@@ -141,8 +194,10 @@ export default function App() {
     const before = seenDiscard.current
     seenDiscard.current = discardCount
     if (discardCount <= before) return
-    setKaboom({ cards: game.discard.slice(before).slice(-4), before })
-    const timer = setTimeout(() => setKaboom(null), prefersReducedMotion() ? 600 : KABOOM_DURATION)
+    const ten = game.lastPlay?.card.rank === 10 && !prefersReducedMotion() ? game.lastPlay.card : null
+    const delay = ten ? PLAY_FLIGHT : 0
+    setKaboom({ cards: game.discard.slice(before).slice(-4), before, delay, landing: ten?.id })
+    const timer = setTimeout(() => setKaboom(null), (prefersReducedMotion() ? 600 : KABOOM_DURATION) + delay)
     return () => clearTimeout(timer)
     // only a growing discard matters, not every change to the game
   }, [discardCount])
@@ -188,7 +243,8 @@ export default function App() {
 
   const you = game.players[HUMAN]
   const computer = game.players[1]
-  const visiblePile = game.pile.slice(-4)
+  // the card still flying onto the pile isn't on it yet
+  const visiblePile = game.pile.filter((c) => c.id !== flight?.card.id).slice(-4)
   // the blown-up cards land on the discard once the explosion is over
   const discardShown = kaboom ? game.discard.slice(0, kaboom.before) : game.discard
 
@@ -224,7 +280,11 @@ export default function App() {
           ]}
         />
 
-        <main className={`felt ${kaboom && !prefersReducedMotion() ? 'felt--shake' : ''}`} ref={feltRef}>
+        <main
+          className={`felt ${kaboom && !prefersReducedMotion() ? 'felt--shake' : ''}`}
+          style={{ '--kaboom-delay': `${kaboom?.delay ?? 0}ms` } as CSSProperties}
+          ref={feltRef}
+        >
           <Seat
             player={computer}
             active={game.winner === null && game.current === 1}
@@ -233,37 +293,45 @@ export default function App() {
           />
 
           <section className="table-center" aria-label="Table">
-            <div className="table-center__stack" data-deck>
-              {game.deck.length > 0 ? (
-                <CardView faceDown className="deck" label={`Deck, ${game.deck.length} cards`} />
-              ) : (
-                <EmptySpot label="Empty" />
-              )}
-              <span className="felt-label">Deck · {game.deck.length}</span>
-            </div>
-
-            <div className="table-center__stack">
-              <div className="pile">
-                {visiblePile.length === 0 && <EmptySpot />}
-                {visiblePile.map((card, i) => (
-                  <div className="pile__card" style={{ left: i * 16 }} key={card.id}>
-                    <CardView card={card} />
-                  </div>
-                ))}
-                {humanStuck && (
-                  <button
-                    type="button"
-                    className="pile__pick-up"
-                    onClick={pickUp}
-                    aria-label={`Pick up the pile, ${game.pile.length} cards`}
-                  />
+            {/* deck, pile and direction in the middle; the discard out on the far right */}
+            <div className="table-center__main">
+              <div className="table-center__stack" data-deck>
+                {game.deck.length > 0 ? (
+                  <CardView faceDown className="deck" label={`Deck, ${game.deck.length} cards`} />
+                ) : (
+                  <EmptySpot label="Empty" />
                 )}
-                {kaboom && <Kaboom cards={kaboom.cards} key={discardCount} />}
+                <span className="felt-label">Deck · {game.deck.length}</span>
               </div>
-              <span className="felt-label">{requirement(game)}</span>
+
+              <div className="table-center__stack">
+                <div className="pile">
+                  {visiblePile.length === 0 && <EmptySpot />}
+                  {visiblePile.map((card, i) => (
+                    <div className="pile__card" style={{ left: i * 16 }} key={card.id}>
+                      <CardView card={card} />
+                    </div>
+                  ))}
+                  {humanStuck && (
+                    <button
+                      type="button"
+                      className="pile__pick-up"
+                      onClick={pickUp}
+                      aria-label={`Pick up the pile, ${game.pile.length} cards`}
+                    />
+                  )}
+                  {kaboom && <Kaboom cards={kaboom.cards} delay={kaboom.delay} landing={kaboom.landing} key={discardCount} />}
+                </div>
+                <span className="felt-label">{requirement(game)}</span>
+              </div>
+
+              <div className="direction" aria-label={`Direction: ${game.goingUp ? 'up' : 'down'}`}>
+                <span className={`direction__arrow ${game.goingUp ? '' : 'direction__arrow--down'}`}>▲</span>
+                <span className="felt-label">Going {game.goingUp ? 'up' : 'down'}</span>
+              </div>
             </div>
 
-            <div className="table-center__stack">
+            <div className="table-center__stack table-center__discard">
               <div className={`discard ${discardShown.length ? 'discard--land' : ''}`} key={discardShown.length}>
                 {discardShown.length === 0 ? (
                   <EmptySpot label="Discard" />
@@ -282,11 +350,6 @@ export default function App() {
               </div>
               <span className="felt-label">Discard · {discardShown.length}</span>
             </div>
-
-            <div className="direction" aria-label={`Direction: ${game.goingUp ? 'up' : 'down'}`}>
-              <span className={`direction__arrow ${game.goingUp ? '' : 'direction__arrow--down'}`}>▲</span>
-              <span className="felt-label">Going {game.goingUp ? 'up' : 'down'}</span>
-            </div>
           </section>
 
           <Seat
@@ -300,6 +363,7 @@ export default function App() {
 
           {swoosh && <Swoosh animation={swoosh} key={`swoosh-${swoosh.id}`} />}
           {drawing && <Deal animation={drawing} key={`deal-${drawing.id}`} />}
+          {flight && <PlayFlight animation={flight} key={`play-${flight.id}`} />}
 
           {celebrating && <WinCascade cards={[...game.discard, ...game.pile]} onDone={endCelebration} />}
         </main>
@@ -403,7 +467,7 @@ function Seat({ player, active, opponent, reservedLocked, onPlay, flash, incomin
       {handCards.length === 0 && <EmptySpot />}
       {/* each card sits in a slot that shrinks when the hand gets big, so the cards overlap more */}
       {handCards.map((card) => (
-        <div className="hand__slot" key={card.id}>
+        <div className="hand__slot" key={card.id} data-card-id={card.id}>
           {opponent ? (
             <CardView faceDown />
           ) : (
@@ -434,7 +498,7 @@ function Seat({ player, active, opponent, reservedLocked, onPlay, flash, incomin
             !slot.public && <EmptySpot />
           )}
           {slot.public && (
-            <div className={`slot__public ${slot.hidden ? '' : 'slot__public--alone'}`}>
+            <div className={`slot__public ${slot.hidden ? '' : 'slot__public--alone'}`} data-card-id={slot.public.id}>
               <CardView
                 card={slot.public}
                 onClick={onPlay ? () => onPlay({ from: 'public', slot: i }) : undefined}
