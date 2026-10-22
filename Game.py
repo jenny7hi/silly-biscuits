@@ -61,8 +61,11 @@ class Game:
 
 				# singleplayer
 				if self.is_singleplayer and self.curr_player == 1:
-					card, message = self.naive_computer_player()
+					card, face, _from, message = self.naive_computer_player()
 					self.message = message
+					if not card:
+						self.next_player()
+						continue
 
 				# multiplayer
 				else:
@@ -111,6 +114,8 @@ class Game:
 	def has_plays(self, player):
 		playable_cards = player.hand if self.deck else player.hand + player.public
 		for card in playable_cards:
+			if card.played:
+				continue
 			if self.is_legal_play(card):
 				return True
 		for i in range(3):
@@ -193,19 +198,24 @@ class Game:
 	"""
 
 	# naive computer player logic for singleplayer game
+	# returns the card to play, its face (or hidden slot number), where it is played from, and a message
 	def naive_computer_player(self):
 		player = self.players[1]
 		len_deck = len(self.deck)
 		for card in player.hand:
-			if self.is_legal_play(card) and player.can_play(card.face, 'hand', len_deck):
-				return card, 'Computer played a %s. Your turn.'% card.face
+			if self.is_legal_play(card):
+				return card, card.face, 'hand', 'Computer played a %s. Your turn.'% card.face
 		if not self.deck:
 			for card in player.public:
-				if self.is_legal_play(card) and player.can_play(card.face, 'public', len_deck):
-					return card, 'Computer played a %s. Your turn.'% card.face
-			for card in player.hidden:
-				if self.is_legal_play(card) and player.can_play(card.face, 'hidden', len_deck):
-					return card, 'Computer played a %s. Your turn.'% card.face
+				if not card.played and self.is_legal_play(card):
+					return card, card.face, 'public', 'Computer played a %s. Your turn.'% card.face
+		# hidden cards are played blind, like a human player would
+		for i in range(3):
+			slot = str(i + 1)
+			card, _ = player.can_play(slot, 'hidden', len_deck)
+			if card:
+				return card, slot, 'hidden', 'Computer played hidden card %s, a %s. Your turn.'% (slot, card.face)
+		return None, None, None, 'Computer has no playable cards. Your turn.'
 
 	"""
 	Printing UI
