@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest'
+import { DIFFICULTIES, type Difficulty, computerMove, computerTurn, unseenCards } from './ai'
 import {
   type Card,
   type GameState,
   type PileCard,
-  computerTurn,
+  SUITS,
+  cloneState,
   isLegal,
   newGame,
   noMove,
   play,
   reference,
+  shuffle,
 } from './game'
 
 // small seeded generator so games are reproducible
@@ -153,29 +156,144 @@ describe('noMove', () => {
   })
 })
 
-describe('computer vs computer', () => {
-  it('finishes every game without getting stuck', () => {
-    let hiddenPlays = 0
-    let finishedByEmptyingHand = 0
-    for (let seed = 0; seed < 300; seed++) {
-      let g = newGame({
-        players: [
-          { name: 'A', isComputer: true },
-          { name: 'B', isComputer: true },
-        ],
-        rng: mulberry32(seed),
-      })
-      let turns = 0
-      while (g.winner === null) {
-        const before = g.players.map((p) => p.slots.filter((s) => s.hidden).length)
-        g = computerTurn(g)
-        expect(g.error).toBeNull()
-        hiddenPlays += before.reduce((n, h, i) => n + h - g.players[i].slots.filter((s) => s.hidden).length, 0)
-        expect(++turns).toBeLessThan(1000)
-      }
-      if (g.players[g.winner].hand.length === 0) finishedByEmptyingHand++
-    }
-    expect(hiddenPlays).toBeGreaterThan(0)
-    expect(finishedByEmptyingHand).toBeGreaterThan(0)
+const twoComputers = (seed: number) =>
+  newGame({
+    players: [
+      { name: 'A', isComputer: true },
+      { name: 'B', isComputer: true },
+    ],
+    rng: mulberry32(seed),
   })
+
+describe('computer vs computer', () => {
+  // Hard looks ahead, so it gets fewer games to keep the suite quick
+  const games: Record<Difficulty, number> = { easy: 300, medium: 300, hard: 20 }
+
+  for (const difficulty of DIFFICULTIES) {
+    it(`finishes every ${difficulty} game without getting stuck`, () => {
+      const rng = mulberry32(42)
+      let hiddenPlays = 0
+      let finishedByEmptyingHand = 0
+      for (let seed = 0; seed < games[difficulty]; seed++) {
+        let g = twoComputers(seed)
+        let turns = 0
+        while (g.winner === null) {
+          const before = g.players.map((p) => p.slots.filter((s) => s.hidden).length)
+          g = computerTurn(g, difficulty, rng)
+          expect(g.error).toBeNull()
+          hiddenPlays += before.reduce((n, h, i) => n + h - g.players[i].slots.filter((s) => s.hidden).length, 0)
+          expect(++turns).toBeLessThan(1000)
+        }
+        if (g.players[g.winner].hand.length === 0) finishedByEmptyingHand++
+      }
+      expect(hiddenPlays).toBeGreaterThan(0)
+      expect(finishedByEmptyingHand).toBeGreaterThan(0)
+    }, 30_000)
+  }
+})
+
+// an endgame with the deck empty where every card not listed is already on the pile, so
+// the computer (player 0) can work out exactly what the opponent is holding. offTable
+// lists ranks that are in play somewhere else, e.g. in a reserved slot set up by the test.
+function endgame(opts: { mine: number[]; theirs: number[]; top: number; goingUp?: boolean; offTable?: number[] }) {
+  const { mine, theirs, top, goingUp = true, offTable = [] } = opts
+  const g = withPile([], goingUp)
+  const counts = Array(14).fill(4)
+  for (const rank of [...mine, ...theirs, ...offTable, top]) counts[rank]--
+  g.pile = counts.flatMap((n, rank) => Array.from({ length: rank ? n : 0 }, () => onPile(rank)))
+  g.pile.push(onPile(top))
+  g.deck = []
+  const empty = () => [0, 1, 2].map(() => ({ public: null, hidden: null }))
+  g.players[0].hand = mine.map(card)
+  g.players[0].slots = empty()
+  g.players[1].hand = theirs.map(card)
+  g.players[1].slots = empty()
+  return g
+}
+
+const played = (g: GameState, difficulty: Difficulty) => {
+  const move = computerMove(g, difficulty, mulberry32(5))
+  return move?.from === 'hand' ? g.players[0].hand.find((c) => c.id === move.cardId)?.rank : move
+}
+
+describe('computerMove', () => {
+  it('only ever picks a legal card on easy', () => {
+    const g = endgame({ mine: [3, 5, 9, 12], theirs: [4], top: 7 })
+    const picks = new Set<number>()
+    for (let seed = 0; seed < 20; seed++) {
+      const move = computerMove(g, 'easy', mulberry32(seed))
+      picks.add(move?.from === 'hand' ? g.players[0].hand.find((c) => c.id === move.cardId)!.rank : 0)
+    }
+    expect([...picks].sort()).toEqual([12, 9])
+  })
+
+  it('plays the lowest useful card on medium', () => {
+    expect(played(endgame({ mine: [8, 1, 9, 12], theirs: [4], top: 7 }), 'medium')).toBe(9)
+    expect(played(endgame({ mine: [8, 1, 3, 5], theirs: [4], top: 7, goingUp: false }), 'medium')).toBe(5)
+  })
+
+  it('clears a public card covering a hidden one before playing from the hand', () => {
+    const g = endgame({ mine: [9], theirs: [10], top: 3, offTable: [11, 6] })
+    g.players[0].slots[1] = { public: card(11), hidden: card(6) }
+    for (const difficulty of ['medium', 'hard'] as const) {
+      expect(computerMove(g, difficulty, mulberry32(1))).toEqual({ from: 'public', slot: 1 })
+    }
+  })
+
+  it('leaves the opponent stuck on hard when that wins the game', () => {
+    // the opponent's last card is a 5: a 4 lets them win, a king leaves them with no move
+    const g = endgame({ mine: [4, 13], theirs: [5], top: 3 })
+    expect(played(g, 'medium')).toBe(4)
+    expect(played(g, 'hard')).toBe(13)
+  })
+
+  it('flips the direction on hard when the opponent cannot follow it', () => {
+    // going up from a 3 the opponent's queen would follow, but after a 2 they need something lower
+    const g = endgame({ mine: [2, 4], theirs: [12], top: 3 })
+    expect(played(g, 'hard')).toBe(2)
+  })
+
+  it('never uses hidden information on hard', () => {
+    // shuffling the cards hard can't see must not change what it plays
+    for (let seed = 0; seed < 30; seed++) {
+      let g = twoComputers(seed)
+      const rng = mulberry32(seed)
+      while (g.winner === null && g.deck.length > 2) g = computerTurn(g, 'medium', rng)
+      if (g.winner !== null) continue
+      const me = g.current
+      const scrambled = cloneState(g)
+      const pool = shuffle(unseenCards(g, me), mulberry32(seed + 1)).map((c, i) => ({ ...c, id: 5000 + i, suit: SUITS[i % 4] }))
+      scrambled.players.forEach((p, i) => {
+        if (i !== me) p.hand = pool.splice(0, p.hand.length)
+        for (const slot of p.slots) if (slot.hidden) slot.hidden = pool.pop()!
+      })
+      scrambled.deck = pool.splice(0, g.deck.length)
+      expect(computerMove(scrambled, 'hard', mulberry32(9))).toEqual(computerMove(g, 'hard', mulberry32(9)))
+    }
+  })
+})
+
+// each pairing plays the same deals twice, once with each side going first
+function winRate(strong: Difficulty, weak: Difficulty, deals: number) {
+  const rng = mulberry32(2024)
+  let wins = 0
+  for (let seed = 0; seed < deals; seed++) {
+    for (const strongSeat of [0, 1]) {
+      const seats = strongSeat === 0 ? [strong, weak] : [weak, strong]
+      let g = twoComputers(1000 + seed)
+      while (g.winner === null) g = computerTurn(g, seats[g.current], rng)
+      if (g.winner === strongSeat) wins++
+    }
+  }
+  return wins / (2 * deals)
+}
+
+describe('difficulty tournament', () => {
+  it('medium beats easy', () => {
+    expect(winRate('medium', 'easy', 200)).toBeGreaterThan(0.58)
+  })
+
+  it('hard beats medium', () => {
+    expect(winRate('hard', 'medium', 100)).toBeGreaterThan(0.65)
+  }, 60_000)
 })

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { DIFFICULTIES, type Difficulty, computerTurn } from './ai'
 import { CardView, EmptySpot } from './CardView'
 import {
   type GameState,
@@ -6,7 +7,6 @@ import {
   type Source,
   cardLabel,
   cardsLeft,
-  computerTurn,
   hasPlays,
   newGame,
   noMove,
@@ -18,6 +18,19 @@ import { MenuBar, MessageBox, StatusBar, TitleBar } from './Xp'
 
 const HUMAN = 0
 const COMPUTER_DELAY = 900
+const DIFFICULTY_KEY = 'silly-biscuits-difficulty'
+
+const difficultyName = (d: Difficulty) => d[0].toUpperCase() + d.slice(1)
+
+function savedDifficulty(): Difficulty {
+  try {
+    const saved = localStorage.getItem(DIFFICULTY_KEY)
+    if (DIFFICULTIES.includes(saved as Difficulty)) return saved as Difficulty
+  } catch {
+    // storage can be unavailable, e.g. in a private window
+  }
+  return 'medium'
+}
 
 type Dialog = 'rules' | 'about' | 'gameOver' | null
 
@@ -29,6 +42,7 @@ function sourceKey(source: Source) {
 
 export default function App() {
   const [game, setGame] = useState<GameState>(() => newGame())
+  const [difficulty, setDifficulty] = useState<Difficulty>(savedDifficulty)
   const [dialog, setDialog] = useState<Dialog>(null)
   const [celebrating, setCelebrating] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
@@ -39,15 +53,26 @@ export default function App() {
     setCelebrating(false)
   }, [])
 
+  const chooseDifficulty = (d: Difficulty) => {
+    if (d === difficulty) return
+    setDifficulty(d)
+    try {
+      localStorage.setItem(DIFFICULTY_KEY, d)
+    } catch {
+      // the choice just won't be remembered
+    }
+    deal()
+  }
+
   const humanTurn = game.winner === null && game.current === HUMAN
   const humanStuck = humanTurn && !hasPlays(game, HUMAN)
 
   // computer turns
   useEffect(() => {
     if (game.winner !== null || !game.players[game.current].isComputer) return
-    const timer = setTimeout(() => setGame(computerTurn), COMPUTER_DELAY)
+    const timer = setTimeout(() => setGame((g) => computerTurn(g, difficulty)), COMPUTER_DELAY)
     return () => clearTimeout(timer)
-  }, [game])
+  }, [game, difficulty])
 
   // you are stuck and the deck is empty: the game ends. Rejected clicks in the meantime
   // must not restart the timer, so this only depends on whether you are stuck.
@@ -119,6 +144,12 @@ export default function App() {
               items: [
                 { label: 'Deal', shortcut: 'F2', onSelect: deal },
                 { label: '', separator: true },
+                ...DIFFICULTIES.map((d) => ({
+                  label: difficultyName(d),
+                  checked: d === difficulty,
+                  onSelect: () => chooseDifficulty(d),
+                })),
+                { label: '', separator: true },
                 { label: 'Rules…', onSelect: () => setDialog('rules') },
               ],
             },
@@ -183,6 +214,7 @@ export default function App() {
           panels={[
             { content: status, grow: true, live: true },
             { content: turnText },
+            { content: difficultyName(difficulty) },
             { content: `Cards left: ${cardsLeft(you)} vs ${cardsLeft(computer)}` },
           ]}
         />
@@ -207,6 +239,7 @@ export default function App() {
             lose your turn.
           </p>
           <p>If you can't play, click the deck to draw a card and lose your turn. Press F2 to deal a new game.</p>
+          <p>Choose how well the computer plays from the Game menu: Easy, Medium or Hard.</p>
         </MessageBox>
       )}
 

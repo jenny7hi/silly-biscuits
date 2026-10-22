@@ -28,6 +28,8 @@ export interface MenuItem {
   shortcut?: string
   onSelect?: () => void
   separator?: boolean
+  // shows a check mark, for one of a set of options
+  checked?: boolean
 }
 
 export function MenuBar({ menus }: { menus: { label: string; items: MenuItem[] }[] }) {
@@ -73,7 +75,8 @@ export function MenuBar({ menus }: { menus: { label: string; items: MenuItem[] }
                 ) : (
                   <button
                     type="button"
-                    role="menuitem"
+                    role={item.checked === undefined ? 'menuitem' : 'menuitemradio'}
+                    aria-checked={item.checked}
                     className="xp-menu__item"
                     key={item.label}
                     onClick={() => {
@@ -81,6 +84,11 @@ export function MenuBar({ menus }: { menus: { label: string; items: MenuItem[] }
                       item.onSelect?.()
                     }}
                   >
+                    {item.checked && (
+                      <span className="xp-menu__check" aria-hidden="true">
+                        ✓
+                      </span>
+                    )}
                     <span>{item.label}</span>
                     {item.shortcut && <span className="xp-menu__shortcut">{item.shortcut}</span>}
                   </button>
