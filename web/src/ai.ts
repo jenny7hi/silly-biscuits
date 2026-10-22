@@ -144,8 +144,8 @@ function kind(state: GameState, source: Source): string {
 }
 
 // Hard: near the end of the deck, imagine many ways the unseen cards could be laid out,
-// play each candidate move out to the end of the game in every one of them, and pick the
-// move that wins most often. Ties go to the move Medium would make.
+// play each candidate move on in every one of them, and pick the move that does best.
+// Ties go to the move Medium would make.
 function hardMove(state: GameState, rng: Rng): Source | null {
   const usual = mediumMove(state)
   if (!usual || state.deck.length > ENDGAME_DECK) return usual
@@ -155,16 +155,16 @@ function hardMove(state: GameState, rng: Rng): Source | null {
   if (moves.length === 1) return usual
 
   const me = state.current
-  const wins = moves.map(() => 0)
+  const scores = moves.map(() => 0)
   for (let i = 0; i < SAMPLES; i++) {
     const world = determinize(state, me, rng)
     moves.forEach((move, j) => {
-      wins[j] += playOut(play(world, move), me)
+      scores[j] += playOut(play(world, move), me)
     })
   }
   let best = moves.indexOf(usual)
-  wins.forEach((n, j) => {
-    if (n > wins[best]) best = j
+  scores.forEach((n, j) => {
+    if (n > scores[best]) best = j
   })
   return moves[best]
 }
