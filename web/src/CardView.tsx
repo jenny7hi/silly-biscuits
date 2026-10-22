@@ -1,4 +1,5 @@
 import { type Card, cardLabel, isRed, rankLabel } from './game'
+import { BING, GAN } from './cardBackGlyphs'
 import { Suit } from './Suit'
 
 interface CardViewProps {
@@ -53,62 +54,128 @@ export function CardView({ card, faceDown, onClick, label, disabled, flash, clas
   )
 }
 
-// the card back, a nod to a chilli crisp jar label: a red field with faint sunburst rays,
-// gold bands, an oval cameo (holding a chilli) and 饼干 ("biscuits") in yellow
+// the card back: a plain hong bao red field inside an ornate gold border, and in the middle a
+// medallion holding a crimped biscuit, ringed by 饼干 ("biscuits") in brush calligraphy. It
+// looks the same either way up, like a real card back.
 const BACK_W = 65
 const BACK_H = 90
-const CAMEO = { x: 32.5, y: 37, rx: 15, ry: 18.5 }
+const GOLD = '#f2c14e'
+const RED = '#c8102e'
+const DEEP_RED = '#8e0a1d'
 
-const RAYS = Array.from({ length: 18 }, (_, i) => {
-  const a = (i / 18) * Math.PI * 2
-  const b = ((i + 0.5) / 18) * Math.PI * 2
-  const r = 80
-  const { x, y } = CAMEO
-  return `M${x} ${y}L${x + r * Math.cos(a)} ${y + r * Math.sin(a)}L${x + r * Math.cos(b)} ${y + r * Math.sin(b)}Z`
-}).join('')
+// the border band runs between these insets from the edge
+const BAND_OUT = 2.4
+const BAND_IN = 7.4
+const BAND_MID = (BAND_OUT + BAND_IN) / 2
 
-const BAND_DIAMONDS = (y: number) =>
-  Array.from({ length: 13 }, (_, i) => {
-    const x = 2.5 + i * 5
-    return `M${x} ${y - 1.6}L${x + 1.6} ${y}L${x} ${y + 1.6}L${x - 1.6} ${y}Z`
-  }).join('')
+const round = (v: number) => Math.round(v * 100) / 100
+const rectPath = (inset: number) =>
+  `M${round(inset)} ${round(inset)}H${round(BACK_W - inset)}V${round(BACK_H - inset)}H${round(inset)}Z`
 
-function Band({ y }: { y: number }) {
-  return (
-    <g>
-      <rect x="0" y={y} width={BACK_W} height="6" fill="#e9b640" />
-      <path d={BAND_DIAMONDS(y + 3)} fill="#b3261e" />
-      <rect x="0" y={y - 0.6} width={BACK_W} height="0.6" fill="#fbe08a" />
-      <rect x="0" y={y + 6} width={BACK_W} height="0.6" fill="#fbe08a" />
-    </g>
-  )
-}
+// beads along the band: diamonds alternating with dots, skipping the corner blocks
+const BEADS = (() => {
+  const beads: { x: number; y: number; diamond: boolean }[] = []
+  const along = (from: number, to: number, place: (t: number) => { x: number; y: number }) => {
+    const count = Math.round((to - from) / 4.2)
+    for (let i = 0; i <= count; i++) {
+      const { x, y } = place(from + ((to - from) * i) / count)
+      beads.push({ x: round(x), y: round(y), diamond: i % 2 === 0 })
+    }
+  }
+  const lo = BAND_IN + 3.4
+  along(lo, BACK_W - lo, (x) => ({ x, y: BAND_MID }))
+  along(lo, BACK_W - lo, (x) => ({ x, y: BACK_H - BAND_MID }))
+  along(lo, BACK_H - lo, (y) => ({ x: BAND_MID, y }))
+  along(lo, BACK_H - lo, (y) => ({ x: BACK_W - BAND_MID, y }))
+  return beads
+})()
+
+const CORNERS = [
+  [BAND_MID, BAND_MID],
+  [BACK_W - BAND_MID, BAND_MID],
+  [BAND_MID, BACK_H - BAND_MID],
+  [BACK_W - BAND_MID, BACK_H - BAND_MID],
+]
+
+// little curls tucked into the inner corners, drawn for the top left and mirrored into the rest
+const CURL = 'M9.6 16.4C9.6 12.4 12.4 9.6 16.4 9.6M11.8 13.6A1.8 1.8 0 1 1 13.6 11.8'
+
+const MEDALLION = { x: BACK_W / 2, y: BACK_H / 2, r: 22 }
+const GLYPH_SCALE = 0.135
+const GLYPH_RADIUS = 14.6
 
 function CardBack() {
-  const { x, y, rx, ry } = CAMEO
+  const { x, y, r } = MEDALLION
   return (
     <svg className="card__back-art" viewBox={`0 0 ${BACK_W} ${BACK_H}`} preserveAspectRatio="none" aria-hidden="true">
-      <rect width={BACK_W} height={BACK_H} fill="#c8161b" />
-      <path d={RAYS} fill="#ff6a45" opacity="0.16" />
-      <Band y={3} />
-      <Band y={BACK_H - 9} />
-      {/* the cameo: a gold ring around a cream oval */}
-      <ellipse cx={x} cy={y} rx={rx + 1.2} ry={ry + 1.2} fill="#7a1408" />
-      <ellipse cx={x} cy={y} rx={rx} ry={ry} fill="#f2be3d" />
-      <ellipse cx={x} cy={y} rx={rx - 2.4} ry={ry - 2.4} fill="#fff1d2" />
-      {/* a chilli */}
-      <path
-        d="M27 28.5C23.8 35 26 45.5 37.5 50.5C33.8 44.5 32.8 38 33.4 30.6C31.4 28.4 29 28 27 28.5Z"
-        fill="#d81e1e"
-        stroke="#7a0b0b"
-        strokeWidth="0.6"
+      <rect width={BACK_W} height={BACK_H} fill={RED} />
+
+      {/* the ornate border: a dark band of gold beads between gold rules, with fret corners */}
+      <path d={rectPath(BAND_OUT) + rectPath(BAND_IN)} fill={DEEP_RED} fillRule="evenodd" />
+      <path d={rectPath(1.4)} fill="none" stroke={GOLD} strokeWidth="0.9" />
+      <path d={rectPath(BAND_OUT)} fill="none" stroke={GOLD} strokeWidth="0.5" />
+      <path d={rectPath(BAND_IN)} fill="none" stroke={GOLD} strokeWidth="0.8" />
+      <path d={rectPath(BAND_IN + 1.3)} fill="none" stroke={GOLD} strokeWidth="0.35" />
+      {BEADS.map((b, i) =>
+        b.diamond ? (
+          <path key={i} d={`M${b.x} ${round(b.y - 1.3)}L${round(b.x + 1.3)} ${b.y}L${b.x} ${round(b.y + 1.3)}L${round(b.x - 1.3)} ${b.y}Z`} fill={GOLD} />
+        ) : (
+          <circle key={i} cx={b.x} cy={b.y} r="0.55" fill={GOLD} />
+        ),
+      )}
+      {CORNERS.map(([cx, cy], i) => (
+        <g key={i} transform={`translate(${cx} ${cy})`}>
+          <rect x="-3.4" y="-3.4" width="6.8" height="6.8" fill={GOLD} />
+          <path d="M-2 -2H2V2H-0.6V-0.6" fill="none" stroke={DEEP_RED} strokeWidth="0.75" />
+        </g>
+      ))}
+      {['', `translate(${BACK_W} 0) scale(-1 1)`, `translate(0 ${BACK_H}) scale(1 -1)`, `translate(${BACK_W} ${BACK_H}) scale(-1 -1)`].map(
+        (mirror) => (
+          <path key={mirror} d={CURL} fill="none" stroke={GOLD} strokeWidth="0.6" strokeLinecap="round" transform={mirror} />
+        ),
+      )}
+
+      {/* the medallion */}
+      <circle cx={x} cy={y} r={r} fill={DEEP_RED} stroke={GOLD} strokeWidth="1.1" />
+      <circle cx={x} cy={y} r={r - 1.6} fill="none" stroke={GOLD} strokeWidth="0.35" />
+
+      {/* a crimped square biscuit set on its point, docked with five holes */}
+      <rect
+        x={x - 4.6}
+        y={y - 4.6}
+        width="9.2"
+        height="9.2"
+        rx="0.8"
+        transform={`rotate(45 ${x} ${y})`}
+        fill="#e9b866"
+        stroke="#c88a3c"
+        strokeWidth="1.3"
+        strokeDasharray="1.4 1"
       />
-      <path d="M28 31.5C27 36.5 28.8 42 32 45.5" fill="none" stroke="#fff" strokeWidth="0.9" opacity="0.55" strokeLinecap="round" />
-      <ellipse cx="30.2" cy="28.9" rx="3.4" ry="1.7" fill="#3c9a2a" transform="rotate(-14 30.2 28.9)" />
-      <path d="M30 28.4C29.6 26 31.2 24 33.8 23.6" fill="none" stroke="#2f7d1f" strokeWidth="1.5" strokeLinecap="round" />
-      <text x={x} y="71.5" textAnchor="middle" className="card__back-text">
-        饼干
-      </text>
+      {[
+        [0, 0],
+        [0, -3],
+        [3, 0],
+        [0, 3],
+        [-3, 0],
+      ].map(([dx, dy]) => (
+        <circle key={`${dx},${dy}`} cx={x + dx} cy={y + dy} r="0.6" fill="#8e531c" />
+      ))}
+
+      {/* 饼 干 饼 干 on the diagonals, each facing outwards */}
+      {[
+        [-45, BING],
+        [45, GAN],
+        [135, BING],
+        [225, GAN],
+      ].map(([angle, d]) => (
+        <path
+          key={angle}
+          d={d as string}
+          fill={GOLD}
+          transform={`translate(${x} ${y}) rotate(${angle}) translate(0 ${-GLYPH_RADIUS}) scale(${GLYPH_SCALE})`}
+        />
+      ))}
     </svg>
   )
 }
