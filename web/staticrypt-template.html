@@ -122,7 +122,9 @@
         height: 12px;
         border: 1px solid #000;
         border-radius: 1px;
-        background: repeating-linear-gradient(45deg, #1d4fb8 0 2px, #3f7ae6 2px 4px);
+        background:
+          radial-gradient(ellipse 30% 26% at 50% 45%, #f2be3d 0 70%, transparent 75%),
+          linear-gradient(#e9b640 0 2px, #c8161b 2px calc(100% - 2px), #e9b640 calc(100% - 2px));
       }
 
       .titlebar__icon i + i {
@@ -222,19 +224,39 @@
       }
 
       .card--back {
-        padding: 2px;
         transform: rotate(-22deg);
+      }
+
+      /* the same chilli-label back as the game: red, gold bands, a cameo and 饼干 */
+      .card--back {
+        background: #c8161b;
+        overflow: hidden;
       }
 
       .card--back::before {
         content: '';
-        display: block;
-        height: 100%;
+        position: absolute;
+        inset: 2px;
         border-radius: 2px;
-        border: 1px solid #0b2f86;
         background:
-          radial-gradient(circle, #9fc1ff 0 1.5px, transparent 2px) 0 0 / 7px 7px,
-          repeating-linear-gradient(45deg, #1747b5 0 3px, #2c63d6 3px 6px);
+          linear-gradient(#e9b640, #e9b640) 0 2px / 100% 4px no-repeat,
+          linear-gradient(#e9b640, #e9b640) 0 calc(100% - 2px) / 100% 4px no-repeat,
+          radial-gradient(ellipse 34% 26% at 50% 40%, #fff1d2 0 62%, #f2be3d 64% 82%, transparent 85%),
+          repeating-conic-gradient(from 0deg at 50% 40%, rgba(255, 106, 69, 0.18) 0 10deg, transparent 10deg 20deg),
+          #c8161b;
+      }
+
+      .card--back::after {
+        content: '饼干';
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 13px;
+        color: #ffd23f;
+        font: 900 10px/1 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+        text-align: center;
+        -webkit-text-stroke: 1px #6e0a06;
+        paint-order: stroke fill;
       }
 
       .card--one {

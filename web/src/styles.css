@@ -121,7 +121,9 @@ button {
   height: 12px;
   border: 1px solid #000;
   border-radius: 1px;
-  background: repeating-linear-gradient(45deg, #1d4fb8 0 2px, #3f7ae6 2px 4px);
+  background:
+    radial-gradient(ellipse 30% 26% at 50% 45%, #f2be3d 0 70%, transparent 75%),
+    linear-gradient(#e9b640 0 2px, #c8161b 2px calc(100% - 2px), #e9b640 calc(100% - 2px));
 }
 
 .xp-titlebar__icon-card--front {
@@ -848,16 +850,22 @@ button.card {
   padding: 3px;
 }
 
-.card__back-pattern {
+.card__back-art {
   display: block;
   width: 100%;
   height: 100%;
   border-radius: 2px;
-  border: 1px solid #0b2f86;
-  background:
-    radial-gradient(circle at 50% 50%, #9fc1ff 0 1.5px, transparent 2px) 0 0 / 8px 8px,
-    repeating-linear-gradient(45deg, #1747b5 0 3px, #2c63d6 3px 6px),
-    #1d4fb8;
+  outline: 1px solid #7a1408;
+  outline-offset: -1px;
+}
+
+.card__back-text {
+  font: 900 13px 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  fill: #ffd23f;
+  stroke: #6e0a06;
+  stroke-width: 1.4px;
+  paint-order: stroke fill;
+  letter-spacing: 1px;
 }
 
 .card--empty {
