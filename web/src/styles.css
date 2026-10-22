@@ -470,8 +470,7 @@ button.xp-button--close:hover {
   border-radius: 6px;
   background: rgba(255, 242, 0, 0.12);
   cursor: pointer;
-  /* an old-fashioned on/off blink */
-  animation: pick-up-prompt 1s steps(1, end) infinite;
+  animation: pick-up-prompt 0.8s ease-in-out infinite alternate;
 }
 
 .pile__pick-up:focus-visible {
@@ -480,9 +479,8 @@ button.xp-button--close:hover {
 }
 
 @keyframes pick-up-prompt {
-  50% {
-    border-color: transparent;
-    background: transparent;
+  to {
+    background: rgba(255, 242, 0, 0.3);
   }
 }
 
@@ -498,7 +496,7 @@ button.xp-button--close:hover {
 }
 
 .discard--land {
-  animation: discard-land 0.21s steps(3, jump-none);
+  animation: discard-land 0.3s ease-out;
 }
 
 @keyframes discard-land {
@@ -519,7 +517,7 @@ button.xp-button--close:hover {
 .kaboom__shard {
   position: absolute;
   top: 0;
-  animation: kaboom-shard 0.7s steps(10, jump-end) var(--kaboom-delay, 0ms) both;
+  animation: kaboom-shard 0.7s cubic-bezier(0.2, 0.7, 0.4, 1) var(--kaboom-delay, 0ms) both;
 }
 
 /* the 10 still flying onto the pile, and the boom itself, wait for it to land */
@@ -529,7 +527,7 @@ button.xp-button--close:hover {
 
 .kaboom__shard--landing {
   animation:
-    kaboom-shard 0.7s steps(10, jump-end) var(--kaboom-delay, 0ms) both,
+    kaboom-shard 0.7s cubic-bezier(0.2, 0.7, 0.4, 1) var(--kaboom-delay, 0ms) both,
     swoosh-appear 0s linear var(--kaboom-delay, 0ms) both;
 }
 
@@ -548,7 +546,7 @@ button.xp-button--close:hover {
   height: 190px;
   margin: -95px 0 0 -95px;
   overflow: visible;
-  animation: kaboom-burst 0.8s steps(2, jump-end) var(--kaboom-delay, 0ms) both;
+  animation: kaboom-burst 0.8s ease-out var(--kaboom-delay, 0ms) both;
 }
 
 .kaboom__burst-outer {
@@ -592,7 +590,7 @@ button.xp-button--close:hover {
   text-shadow: 3px 3px 0 #000;
   white-space: nowrap;
   transform: translate(-50%, -50%);
-  animation: kaboom-text 1.1s steps(2, jump-end) var(--kaboom-delay, 0ms) both;
+  animation: kaboom-text 1.1s ease-out var(--kaboom-delay, 0ms) both;
 }
 
 @keyframes kaboom-text {
@@ -707,7 +705,7 @@ button.xp-button--close:hover {
   text-shadow: 3px 3px 0 #000;
   white-space: nowrap;
   transform: translate(-50%, -50%) rotate(-12deg);
-  animation: swoosh-wrong 1.05s steps(2, jump-end) 0.15s both;
+  animation: swoosh-wrong 1.05s ease-out 0.15s both;
 }
 
 @keyframes swoosh-wrong {
@@ -765,7 +763,7 @@ button.xp-button--close:hover {
 
 /* a little shake of the table when the pile goes up */
 .felt--shake {
-  animation: felt-shake 0.4s steps(1, end) var(--kaboom-delay, 0ms);
+  animation: felt-shake 0.4s linear var(--kaboom-delay, 0ms);
 }
 
 @keyframes felt-shake {
