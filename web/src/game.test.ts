@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { DIFFICULTIES, type Difficulty, computerMove, computerTurn, unseenCards } from './ai'
+import { type Difficulty, computerMove, computerTurn, unseenCards } from './ai'
 import {
   type Card,
   type GameState,
   type PileCard,
   SUITS,
-  cardsLeft,
   cloneState,
   isLegal,
   newGame,
@@ -14,17 +13,8 @@ import {
   reference,
   shuffle,
 } from './game'
+import { mulberry32, twoComputers } from './testing'
 
-// small seeded generator so games are reproducible
-function mulberry32(seed: number) {
-  return () => {
-    seed |= 0
-    seed = (seed + 0x6d2b79f5) | 0
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
 
 let nextId = 1000
 const card = (rank: number): Card => ({ id: nextId++, rank, suit: '♠' })
@@ -170,52 +160,6 @@ describe('noMove', () => {
   })
 })
 
-const twoComputers = (seed: number) =>
-  newGame({
-    players: [
-      { name: 'A', isComputer: true },
-      { name: 'B', isComputer: true },
-    ],
-    rng: mulberry32(seed),
-  })
-
-describe('computer vs computer', () => {
-  // Hard looks ahead, so it gets fewer games to keep the suite quick. Easy plays at random,
-  // so its games can run long before someone gets lucky.
-  const games: Record<Difficulty, number> = { easy: 300, medium: 300, hard: 6 }
-  const maxTurns: Record<Difficulty, number> = { easy: 10_000, medium: 3000, hard: 3000 }
-
-  for (const difficulty of DIFFICULTIES) {
-    it(`finishes almost every ${difficulty} game, always by a player running out of cards`, () => {
-      const rng = mulberry32(42)
-      let hiddenPlays = 0
-      let unfinished = 0
-      for (let seed = 0; seed < games[difficulty]; seed++) {
-        let g = twoComputers(seed)
-        let turns = 0
-        while (g.winner === null && turns < maxTurns[difficulty]) {
-          const before = g.players.map((p) => p.slots.filter((s) => s.hidden).length)
-          g = computerTurn(g, difficulty, rng)
-          expect(g.error).toBeNull()
-          hiddenPlays += before.reduce((n, h, i) => n + h - g.players[i].slots.filter((s) => s.hidden).length, 0)
-          turns++
-        }
-        // once every 10 is in the discard, no cards leave play, and two computers can
-        // pass the same cards back and forth forever (about 11 in 300 games for Medium
-        // since the player who picks up leads the next pile). A person breaks the loop.
-        if (g.winner === null) {
-          unfinished++
-          continue
-        }
-        // the only way to win is to play every card
-        expect(cardsLeft(g.players[g.winner])).toBe(0)
-      }
-      expect(unfinished).toBeLessThan(Math.max(2, games[difficulty] / 15))
-      expect(hiddenPlays).toBeGreaterThan(0)
-    }, 60_000)
-  }
-})
-
 // an endgame with the deck empty where every card not listed is already on the pile, so
 // the computer (player 0) can work out exactly what the opponent is holding. offTable
 // lists ranks that are in play somewhere else, e.g. in a reserved slot set up by the test.
@@ -297,29 +241,4 @@ describe('computerMove', () => {
       expect(computerMove(scrambled, 'hard', mulberry32(9))).toEqual(computerMove(g, 'hard', mulberry32(9)))
     }
   })
-})
-
-// each pairing plays the same deals twice, once with each side going first
-function winRate(strong: Difficulty, weak: Difficulty, deals: number) {
-  const rng = mulberry32(2024)
-  let wins = 0
-  for (let seed = 0; seed < deals; seed++) {
-    for (const strongSeat of [0, 1]) {
-      const seats = strongSeat === 0 ? [strong, weak] : [weak, strong]
-      let g = twoComputers(1000 + seed)
-      for (let turns = 0; g.winner === null && turns < 3000; turns++) g = computerTurn(g, seats[g.current], rng)
-      if (g.winner === strongSeat) wins++
-    }
-  }
-  return wins / (2 * deals)
-}
-
-describe('difficulty tournament', () => {
-  it('medium beats easy', () => {
-    expect(winRate('medium', 'easy', 200)).toBeGreaterThan(0.58)
-  })
-
-  it('hard beats medium', () => {
-    expect(winRate('hard', 'medium', 60)).toBeGreaterThan(0.65)
-  }, 60_000)
 })
