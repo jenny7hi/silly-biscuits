@@ -79,9 +79,14 @@ export default function App() {
   const [swoosh, setSwoosh] = useState<SwooshAnimation | null>(null)
   const [drawing, setDrawing] = useState<DealAnimation | null>(null)
   const feltRef = useRef<HTMLElement>(null)
+  // counts deals, so the computer's hand order starts afresh with each new game
+  const [dealt, setDealt] = useState(0)
+  // which end of the computer's hand is nearer the deck and the pile, measured after each render
+  const opponentEnds = useRef<HandEnds>({ deck: 'end', pile: 'end' })
 
   const deal = useCallback(() => {
     setGame(newGame())
+    setDealt((n) => n + 1)
     setDialog(null)
     setCelebrating(false)
   }, [])
@@ -233,6 +238,19 @@ export default function App() {
       })
     })
     cardPositions.current = positions
+
+    // which end of the computer's hand is nearer the deck and the pile
+    const slots = felt.querySelectorAll<HTMLElement>('.seat--opponent .hand__slot')
+    if (slots.length) {
+      const first = feltPosition(felt, slots[0])
+      const last = slots[slots.length - 1]
+      const middle = (first.x + feltPosition(felt, last).x + last.offsetWidth) / 2
+      const endNearest = (selector: string): HandEnd => {
+        const el = felt.querySelector<HTMLElement>(selector)
+        return el && feltPosition(felt, el).x + el.offsetWidth / 2 < middle ? 'start' : 'end'
+      }
+      opponentEnds.current = { deck: endNearest('[data-deck]'), pile: endNearest('.pile') }
+    }
   })
 
   // in development, expose the game so animations can be checked from the console
@@ -296,6 +314,7 @@ export default function App() {
 
   const you = game.players[HUMAN]
   const computer = game.players[1]
+  const computerHand = useHiddenHandOrder(computer.hand, dealt, game, opponentEnds)
   // the card still flying onto the pile isn't on it yet
   const visiblePile = game.pile.filter((c) => c.id !== flight?.card.id).slice(-4)
   // the blown-up cards land on the discard once the explosion is over
@@ -346,6 +365,7 @@ export default function App() {
         >
           <Seat
             player={computer}
+            hand={computerHand}
             active={game.winner === null && game.current === 1}
             opponent
             incoming={incomingFor(1, swoosh, drawing)}
@@ -527,8 +547,55 @@ function incomingFor(player: number, ...animations: ({ player: number; hiddenIds
   return ids.length ? new Set(ids) : undefined
 }
 
+type HandEnd = 'start' | 'end'
+interface HandEnds {
+  deck: HandEnd
+  pile: HandEnd
+}
+
+// The computer's cards are shown in the order it got them, never sorted, so where a card
+// sits in its hand (or lands, or leaves from) says nothing about its rank. New cards join
+// whichever end of the hand is nearer to where they came from: the deck or the pile.
+function nextHiddenOrder(previous: number[], hand: Card[], game: GameState, ends: HandEnds) {
+  const inHand = new Set(hand.map((c) => c.id))
+  const kept = previous.filter((id) => inHand.has(id))
+  const keptIds = new Set(kept)
+  const drawOrder = game.draw?.cards.map((c) => c.id) ?? []
+  // picked-up cards keep the order they had on the pile, then any failed hidden card
+  const pileOrder = [...(game.pickup?.cards ?? []), ...(game.pickup?.flipped ? [game.pickup.flipped] : [])].map((c) => c.id)
+  const fresh = hand.filter((c) => !keptIds.has(c.id)).map((c) => c.id)
+  const byOrder = (list: number[]) => (a: number, b: number) => list.indexOf(a) - list.indexOf(b)
+  const fromDeck = fresh.filter((id) => drawOrder.includes(id)).sort(byOrder(drawOrder))
+  const fromPile = fresh.filter((id) => !drawOrder.includes(id)).sort(byOrder(pileOrder))
+  let ids = kept
+  const join = (newIds: number[], end: HandEnd) => {
+    if (newIds.length) ids = end === 'start' ? [...newIds.reverse(), ...ids] : [...ids, ...newIds]
+  }
+  join(fromPile, ends.pile)
+  join(fromDeck, ends.deck)
+  return ids
+}
+
+// Keeps that order as state. When the hand changes, the next order is worked out during the
+// render (React's pattern for state derived from props), so what's on screen and what the
+// next change builds on are always the same.
+function useHiddenHandOrder(hand: Card[], dealt: number, game: GameState, ends: { current: HandEnds }) {
+  const [order, setOrder] = useState(() => ({ hand, dealt, ids: hand.map((c) => c.id) }))
+  let current = order
+  if (order.hand !== hand || order.dealt !== dealt) {
+    // a fresh deal starts from the dealt order: nothing has moved yet, so it gives nothing away
+    const ids = order.dealt !== dealt ? hand.map((c) => c.id) : nextHiddenOrder(order.ids, hand, game, ends.current)
+    current = { hand, dealt, ids }
+    setOrder(current)
+  }
+  const byId = new Map(hand.map((c) => [c.id, c]))
+  return current.ids.map((id) => byId.get(id)!)
+}
+
 interface SeatProps {
   player: Player
+  // the order to show the hand in, when it isn't the player's own sorted order
+  hand?: Card[]
   active: boolean
   opponent?: boolean
   reservedLocked?: boolean
@@ -538,13 +605,13 @@ interface SeatProps {
   incoming?: Set<number>
 }
 
-function Seat({ player, active, opponent, reservedLocked, onPlay, flash, incoming }: SeatProps) {
+function Seat({ player, hand: cards = player.hand, active, opponent, reservedLocked, onPlay, flash, incoming }: SeatProps) {
   const hand = (
     <div className={`hand ${opponent ? 'hand--opponent' : ''}`} aria-label={`${player.name} hand`}>
-      {player.hand.length === 0 && <EmptySpot />}
+      {cards.length === 0 && <EmptySpot />}
       {/* each card sits in a slot that shrinks when the hand gets big, so the cards overlap more.
           A card still flying in keeps its slot, invisible, until it lands. */}
-      {player.hand.map((card) => (
+      {cards.map((card) => (
         <div
           className={`hand__slot ${incoming?.has(card.id) ? 'hand__slot--incoming' : ''}`}
           key={card.id}
