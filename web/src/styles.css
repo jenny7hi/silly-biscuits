@@ -619,6 +619,68 @@ button.xp-button--close:hover {
   }
 }
 
+/* ---------- playing several cards of a rank: the fan ---------- */
+
+/* holding a card shouldn't select text or pop up the phone's long-press menu */
+.hand__slot {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* an XP tooltip-yellow balloon holding the matching cards and a button per count */
+.multi-fan {
+  position: absolute;
+  z-index: 6;
+  padding: 6px 8px 8px;
+  background: #ffffe1;
+  border: 1px solid #000;
+  border-radius: 6px;
+  box-shadow: 2px 2px 3px rgba(0, 0, 0, 0.35);
+  touch-action: manipulation;
+}
+
+.multi-fan__cards {
+  position: relative;
+  height: calc(var(--card-h) + 10px);
+}
+
+.multi-fan__card {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform-origin: 50% 100%;
+  transform: translateX(calc(-50% + var(--fan-x))) translateY(var(--fan-lift)) rotate(var(--fan-rot));
+  transition: transform 0.15s ease-out;
+  animation: fan-out 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes fan-out {
+  from {
+    transform: translateX(-50%) translateY(8px) rotate(0deg);
+  }
+}
+
+.multi-fan__buttons {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.multi-fan .multi-fan__button {
+  min-width: 36px;
+  height: 26px;
+  padding: 0 8px;
+}
+
+@media (pointer: coarse) {
+  .multi-fan .multi-fan__button {
+    min-width: 44px;
+    height: 34px;
+  }
+}
+
 /* ---------- picking up: the pile swooshes into a hand ---------- */
 
 .swoosh {
@@ -1154,6 +1216,11 @@ button.card {
   .discard--land,
   .felt--shake {
     animation: none;
+  }
+
+  .multi-fan__card {
+    animation: none;
+    transition: none;
   }
 
   /* keep the 错！ and the revealed card, but nothing flies */
