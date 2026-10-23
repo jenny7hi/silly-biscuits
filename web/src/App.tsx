@@ -360,6 +360,12 @@ export default function App() {
     if (!humanTurn) return
     if (!fromFan && Date.now() < ignoreClicksUntil.current) return
     clearTimeout(holdTimer.current)
+    // clicking a card you hold several of plays them all; the fan is for playing fewer
+    if (source.from === 'hand' && !fromFan && !source.with) {
+      const { cardId } = source
+      const card = game.players[HUMAN].hand.find((c) => c.id === cardId)
+      if (card) source = { ...source, with: matching(card).filter((c) => c.id !== card.id).map((c) => c.id) }
+    }
     const next = play(game, source)
     if (next.error) {
       setFlash(sourceKey(source))
@@ -549,9 +555,9 @@ export default function App() {
             pile, then play again.
           </p>
           <p>
-            <b>Playing several at once:</b> got more than one card of the same rank? Hover over one for a second (or press
-            and hold it on a touch screen) and they fan out, so you can play two, three or all of them together. They count
-            as one play.
+            <b>Playing several at once:</b> clicking a card you hold more than one of plays all of them together, as one
+            play. To play fewer, hover over it for a second (or press and hold it on a touch screen) and pick how many from
+            the fan.
           </p>
           <p>
             If you can't play, click the pile to pick it all up, then start the empty pile with any card. After each play

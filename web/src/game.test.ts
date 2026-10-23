@@ -271,6 +271,33 @@ describe('computerMove', () => {
     expect(played(g, 'hard')).toBe(2)
   })
 
+  it('plays every copy of an ordinary card on medium, but specials one at a time', () => {
+    const g = endgame({ mine: [9, 9, 9, 12], theirs: [4], top: 7 })
+    const move = computerMove(g, 'medium')
+    expect(move?.from === 'hand' && move.with?.length).toBe(2)
+
+    const h = endgame({ mine: [8, 8, 12], theirs: [4], top: 13 })
+    const special = computerMove(h, 'medium')
+    expect(special?.from === 'hand' && (special.with ?? []).length).toBe(0)
+  })
+
+  it('plays sets of different sizes at random on easy', () => {
+    const g = endgame({ mine: [9, 9, 9], theirs: [4], top: 7 })
+    const sizes = new Set<number>()
+    for (let seed = 0; seed < 40; seed++) {
+      const move = computerMove(g, 'easy', mulberry32(seed))
+      if (move?.from === 'hand') sizes.add(1 + (move.with?.length ?? 0))
+    }
+    expect([...sizes].sort()).toEqual([1, 2, 3])
+  })
+
+  it('plays a pair on hard when that empties its hand and wins', () => {
+    const g = endgame({ mine: [6, 6], theirs: [5, 9], top: 3 })
+    const move = computerMove(g, 'hard', mulberry32(3))
+    expect(move?.from === 'hand' && move.with?.length).toBe(1)
+    expect(play(g, move!).winner).toBe(0)
+  })
+
   it('never uses hidden information on hard', () => {
     // shuffling the cards hard can't see must not change what it plays
     for (let seed = 0; seed < 30; seed++) {

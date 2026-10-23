@@ -12,7 +12,7 @@ There is also a React version in the `web` folder, styled like Windows XP Solita
 2. In terminal, run `cd web && npm install`.
 3. Run `npm run dev` and open the address it prints.
 
-Click a card to play it and press F2 to deal a new game. To play several cards of the same rank together, hover over one for a second (or press and hold it on a touch screen) and pick how many from the fan. Every new game starts by asking how well the computer should play: Soggy 软趴趴 (easy), Crumbly 一碰就碎 (medium) or Crunchy 嘎嘣脆 (hard).
+Click a card to play it and press F2 to deal a new game. Clicking a card you hold several of plays them all together; to play fewer, hover over it for a second (or press and hold it on a touch screen) and pick "Only 1", "Only 2" and so on from the fan. Every new game starts by asking how well the computer should play: Soggy 软趴趴 (easy), Crumbly 一碰就碎 (medium) or Crunchy 嘎嘣脆 (hard).
 
 Run `npm test` in the `web` folder to test the rules engine and the computer players, including a short tournament between the difficulty levels. `npm run test:tournament` plays the full tournament, which takes several minutes, and prints each matchup's win rate and how many games never finished.
 
