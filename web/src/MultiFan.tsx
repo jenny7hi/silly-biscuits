@@ -15,9 +15,9 @@ export interface FanState {
 
 const NUMBER_WORDS = ['', 'one', 'two', 'three', 'four']
 
-// When you have more than one card of a rank, holding one (hovering for a second with a
-// mouse, or pressing and holding on a touch screen) fans the matching cards out above it,
-// with a button for each way to play them: one card, two, three, or all of them.
+// Clicking a card you hold several of plays them all. To play fewer, hold one (hover for a
+// second with a mouse, or press and hold on a touch screen): the matching cards fan out
+// above it, with a button for each smaller number, "Only 1" up to one short of all of them.
 export function MultiFan({
   fan,
   feltWidth,
@@ -30,7 +30,7 @@ export function MultiFan({
   onClose: () => void
 }) {
   const { cards, anchor, touch } = fan
-  const [preview, setPreview] = useState(cards.length)
+  const [preview, setPreview] = useState(1)
   const ref = useRef<HTMLDivElement>(null)
 
   // close on Escape, or on a tap or click anywhere outside the fan
@@ -41,7 +41,7 @@ export function MultiFan({
     const escape = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     document.addEventListener('pointerdown', outside, true)
     document.addEventListener('keydown', escape)
-    ref.current?.querySelector<HTMLButtonElement>('button:last-of-type')?.focus({ preventScroll: true })
+    ref.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true })
     return () => {
       document.removeEventListener('pointerdown', outside, true)
       document.removeEventListener('keydown', escape)
@@ -51,7 +51,7 @@ export function MultiFan({
   // wide enough for the spread of cards and for a button per count
   const cardWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--card-w')) || 71
   const coarse = window.matchMedia?.('(pointer: coarse)').matches
-  const width = Math.max(cardWidth + (cards.length - 1) * 26 + 40, cards.length * (coarse ? 52 : 44) + 44)
+  const width = Math.max(cardWidth + (cards.length - 1) * 26 + 40, (cards.length - 1) * (coarse ? 76 : 66) + 24)
   const left = Math.min(Math.max(anchor.x + cardWidth / 2 - width / 2, 4), Math.max(4, feltWidth - width - 4))
   const rank = rankLabel(cards[0].rank)
 
@@ -81,9 +81,8 @@ export function MultiFan({
         })}
       </div>
       <div className="multi-fan__buttons">
-        {cards.map((_, i) => {
+        {cards.slice(1).map((_, i) => {
           const count = i + 1
-          const all = count === cards.length
           return (
             <button
               type="button"
@@ -92,9 +91,9 @@ export function MultiFan({
               onPointerEnter={() => setPreview(count)}
               onFocus={() => setPreview(count)}
               onClick={() => onPlay(count)}
-              aria-label={`Play ${NUMBER_WORDS[count]} ${rank}${count > 1 ? 's' : ''}`}
+              aria-label={`Play only ${NUMBER_WORDS[count]} ${rank}${count > 1 ? 's' : ''}`}
             >
-              {all && count > 1 ? `All ${count}` : count}
+              Only {count}
             </button>
           )
         })}

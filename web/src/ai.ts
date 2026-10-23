@@ -46,18 +46,43 @@ function options(state: GameState): Option[] {
 
 const pick = <T>(items: T[], rng: Rng) => items[Math.floor(rng() * items.length)]
 
-// Easy: any card that can be played, at random. Hidden cards only when nothing else will do.
+// the other cards of the same rank in the hand, for playing several together
+function copiesOf(state: GameState, source: Source): Card[] {
+  if (source.from !== 'hand') return []
+  const hand = state.players[state.current].hand
+  const card = hand.find((c) => c.id === source.cardId)!
+  return hand.filter((c) => c.rank === card.rank && c.id !== card.id)
+}
+
+// the same hand play, with `extra` more cards of its rank played alongside it
+function withCopies(state: GameState, source: Source, extra: number): Source {
+  if (source.from !== 'hand' || extra <= 0) return source
+  return { ...source, with: copiesOf(state, source).slice(0, extra).map((c) => c.id) }
+}
+
+// Easy: any card that can be played, at random, along with a random number of its copies.
+// Hidden cards only when nothing else will do.
 function easyMove(state: GameState, rng: Rng): Source | null {
   const opts = options(state)
   const visible = opts.filter((o) => o.card)
-  return (visible.length ? pick(visible, rng) : pick(opts, rng))?.source ?? null
+  const chosen = (visible.length ? pick(visible, rng) : pick(opts, rng))?.source ?? null
+  if (!chosen) return null
+  return withCopies(state, chosen, Math.floor(rng() * (copiesOf(state, chosen).length + 1)))
 }
 
 // Medium: keep specials and aces for later and play the card that keeps the most options
 // open. Once the deck is empty, clear public cards that sit on hidden ones first: a hidden
 // card you can reach is always a move, so it stops you getting stuck. Hidden cards
-// themselves are kept until nothing else will do.
+// themselves are kept until nothing else will do. An ordinary card goes down with all its
+// copies, to empty the hand faster; specials and aces go one at a time, to save the rest.
 function mediumMove(state: GameState): Source | null {
+  const chosen = mediumSingle(state)
+  if (!chosen || chosen.from !== 'hand') return chosen
+  const card = state.players[state.current].hand.find((c) => c.id === chosen.cardId)!
+  return isSpecial(card) || card.rank === 1 ? chosen : withCopies(state, chosen, 3)
+}
+
+function mediumSingle(state: GameState): Source | null {
   const cost = (card: Card) => {
     if (isSpecial(card)) return 100 + card.rank
     if (card.rank === 1) return 50
@@ -133,23 +158,28 @@ const SAMPLES = 16
 const DEPTH = 40
 const SPREAD = 6
 
-// the same card from the hand plays the same however many copies there are, and every
-// hidden card is equally unknown, so only one move of each kind needs to be weighed
+// cards of the same rank from the hand play the same whichever copies they are (but not
+// however many), and every hidden card is equally unknown, so only one move of each kind
+// needs to be weighed
 function kind(state: GameState, source: Source): string {
   const p = state.players[state.current]
-  if (source.from === 'hand') return `hand-${p.hand.find((c) => c.id === source.cardId)!.rank}`
+  if (source.from === 'hand') return `hand-${p.hand.find((c) => c.id === source.cardId)!.rank}x${1 + (source.with?.length ?? 0)}`
   const slot = p.slots[source.slot]
   if (source.from === 'public') return `public-${slot.public!.rank}-${slot.hidden ? 'covering' : 'alone'}`
   return 'hidden'
 }
 
 // Hard: near the end of the deck, imagine many ways the unseen cards could be laid out,
-// play each candidate move on in every one of them, and pick the move that does best.
-// Ties go to the move Medium would make.
+// play each candidate move on in every one of them (including playing a card with some or
+// all of its copies), and pick the move that does best. Ties go to the move Medium would make.
 function hardMove(state: GameState, rng: Rng): Source | null {
   const usual = mediumMove(state)
   if (!usual || state.deck.length > ENDGAME_DECK) return usual
-  const kinds = new Map(options(state).map((o) => [kind(state, o.source), o.source]))
+  // every way to play each card: on its own, or with one or more of its copies
+  const candidates = options(state).flatMap((o) =>
+    Array.from({ length: copiesOf(state, o.source).length + 1 }, (_, extra) => withCopies(state, o.source, extra)),
+  )
+  const kinds = new Map(candidates.map((source) => [kind(state, source), source]))
   kinds.set(kind(state, usual), usual)
   const moves = [...kinds.values()]
   if (moves.length === 1) return usual
