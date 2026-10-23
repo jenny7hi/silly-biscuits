@@ -30,7 +30,8 @@ export interface Player {
 }
 
 export type Source =
-  | { from: 'hand'; cardId: number }
+  // `with` plays more cards of the same rank from the hand at the same time
+  | { from: 'hand'; cardId: number; with?: number[] }
   | { from: 'public'; slot: number }
   | { from: 'hidden'; slot: number }
 
@@ -52,6 +53,8 @@ export interface LastPlay {
   id: number
   player: number
   card: Card
+  // more cards of the same rank played with it
+  extras: Card[]
   from: Source['from']
   slot: number | null
   // how many cards were on the pile once it landed (a 10 then blows them away)
@@ -238,6 +241,12 @@ function pickUpPile(state: GameState, flipped: Card | null = null, slot: number 
   return cards.length
 }
 
+// "7♥", "7♥ and 7♣" or "7♥, 7♣ and 7♠"
+const listLabels = (cards: Card[]) => {
+  const labels = cards.map(cardLabel)
+  return labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
+}
+
 const playsNext = (p: Player) => (p.name === 'You' ? 'You play next.' : `${p.name} plays next.`)
 
 function advance(state: GameState) {
@@ -266,16 +275,29 @@ export function play(state: GameState, source: Source): GameState {
     return s
   }
 
-  if (source.from === 'hand') p.hand = p.hand.filter((c) => c.id !== card.id)
+  // any matching cards played alongside it, all from the hand
+  const extras: Card[] = []
+  if (source.from === 'hand' && source.with?.length) {
+    for (const id of source.with) {
+      const extra = p.hand.find((c) => c.id === id)
+      if (!extra || id === card.id || extras.includes(extra)) return { ...s, error: "You don't have those cards." }
+      if (extra.rank !== card.rank) return { ...s, error: 'Cards played together must all be the same rank.' }
+      extras.push(extra)
+    }
+  }
+  const played = [card, ...extras]
+
+  if (source.from === 'hand') p.hand = p.hand.filter((c) => !played.includes(c))
   else if (source.from === 'public') p.slots[source.slot].public = null
   else p.slots[source.slot].hidden = null
 
   const value = card.rank === 1 ? (s.goingUp ? 14 : 1) : card.rank
-  s.pile.push({ ...card, value })
+  for (const c of played) s.pile.push({ ...c, value })
   s.lastPlay = {
     id: (s.lastPlay?.id ?? 0) + 1,
     player: s.current,
     card,
+    extras,
     from: source.from,
     slot: source.from === 'hand' ? null : source.slot,
     pileSize: s.pile.length,
@@ -289,7 +311,8 @@ export function play(state: GameState, source: Source): GameState {
   }
   p.hand.sort(byRank)
 
-  const label = cardLabel(card)
+  // several cards count as one play: a pair of 2s flips the direction once, and so on
+  const label = listLabels(played)
   if (hasWon(p)) {
     s.winner = s.current
     s.message = `${playedVerb(p)} ${label} and ${p.name === 'You' ? 'win' : 'wins'}!`

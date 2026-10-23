@@ -11,22 +11,24 @@ import {
   cardLabel,
   cardsLeft,
   hasPlays,
+  isLegal,
   newGame,
   noMove,
   play,
   requirement,
 } from './game'
 import { Kaboom } from './Kaboom'
+import { type FanState, MultiFan } from './MultiFan'
 import {
   Deal,
   type DealAnimation,
-  PLAY_FLIGHT,
   PlayFlight,
   type PlayFlightAnimation,
   type Point,
   Swoosh,
   type SwooshAnimation,
   dealDuration,
+  playFlightDuration,
   swooshDuration,
 } from './Swoosh'
 import { WinCascade } from './WinCascade'
@@ -71,8 +73,8 @@ export default function App() {
   const [celebrating, setCelebrating] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
   // the cards flying out of an exploding pile, and how big the discard was before
-  // `delay` lets a 10 land before it explodes; `landing` is that 10
-  const [kaboom, setKaboom] = useState<{ cards: PileCard[]; before: number; delay: number; landing?: number } | null>(
+  // `delay` lets the 10s land before they explode; `landing` is those 10s
+  const [kaboom, setKaboom] = useState<{ cards: PileCard[]; before: number; delay: number; landing?: number[] } | null>(
     null,
   )
   const [flight, setFlight] = useState<PlayFlightAnimation | null>(null)
@@ -191,26 +193,32 @@ export default function App() {
     seenPlay.current = played.id
     const felt = feltRef.current
     if (!felt || prefersReducedMotion()) return
-    let from = cardPositions.current.get(played.card.id) ?? null
-    if (played.from === 'hidden') {
-      const slot = felt.querySelector<HTMLElement>(`[data-seat="${played.player}"][data-slot="${played.slot}"]`)
-      from = slot ? feltPosition(felt, slot) : null
-    }
     const pileEl = felt.querySelector<HTMLElement>('.pile')
-    if (!from || !pileEl) return
+    if (!pileEl) return
     const pile = feltPosition(felt, pileEl)
+    const all = [played.card, ...played.extras]
+    // the pile shows its last four cards fanned out; each played card lands on its own spot
+    const firstShown = Math.max(0, played.pileSize - 4)
+    const cards = all.flatMap((card, i) => {
+      let from = cardPositions.current.get(card.id) ?? null
+      if (played.from === 'hidden') {
+        const slot = felt.querySelector<HTMLElement>(`[data-seat="${played.player}"][data-slot="${played.slot}"]`)
+        from = slot ? feltPosition(felt, slot) : null
+      }
+      const shown = Math.max(0, played.pileSize - all.length + i - firstShown)
+      return from ? [{ card, from, to: { x: pile.x + shown * 16, y: pile.y } }] : []
+    })
+    if (!cards.length) return
     setFlight({
       id: played.id,
-      card: played.card,
-      from,
-      to: { x: pile.x + (Math.min(played.pileSize, 4) - 1) * 16, y: pile.y },
+      cards,
       faceDown: played.from === 'hidden' || (played.from === 'hand' && game.players[played.player].isComputer),
     })
   }, [game.lastPlay])
 
   useEffect(() => {
     if (!flight) return
-    const timer = setTimeout(() => setFlight(null), PLAY_FLIGHT + 30)
+    const timer = setTimeout(() => setFlight(null), playFlightDuration(flight.cards.length) + 30)
     return () => clearTimeout(timer)
   }, [flight])
 
@@ -265,9 +273,10 @@ export default function App() {
     const before = seenDiscard.current
     seenDiscard.current = discardCount
     if (discardCount <= before) return
-    const ten = game.lastPlay?.card.rank === 10 && !prefersReducedMotion() ? game.lastPlay.card : null
-    const delay = ten ? PLAY_FLIGHT : 0
-    setKaboom({ cards: game.discard.slice(before).slice(-4), before, delay, landing: ten?.id })
+    const tens =
+      game.lastPlay?.card.rank === 10 && !prefersReducedMotion() ? [game.lastPlay.card, ...game.lastPlay.extras] : []
+    const delay = tens.length ? playFlightDuration(tens.length) : 0
+    setKaboom({ cards: game.discard.slice(before).slice(-4), before, delay, landing: tens.map((c) => c.id) })
     const timer = setTimeout(() => setKaboom(null), (prefersReducedMotion() ? 600 : KABOOM_DURATION) + delay)
     return () => clearTimeout(timer)
     // only a growing discard matters, not every change to the game
@@ -296,8 +305,61 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [askForNewGame])
 
-  const attempt = (source: Source) => {
+  // ---- playing several cards of the same rank together ----
+  const [fan, setFan] = useState<FanState | null>(null)
+  const holdTimer = useRef<ReturnType<typeof setTimeout>>()
+  // a press-and-hold that opened the fan, or a tap that closed it, mustn't also play a card
+  const ignoreClicksUntil = useRef(0)
+  const MOUSE_HOLD = 1000
+  const TOUCH_HOLD = 450
+
+  const matching = (card: Card) => game.players[HUMAN].hand.filter((c) => c.rank === card.rank)
+  const canFan = (card: Card) => humanTurn && matching(card).length > 1 && isLegal(game, card)
+
+  const openFan = (card: Card, touch: boolean) => {
+    const felt = feltRef.current
+    const slot = felt?.querySelector<HTMLElement>(`.seat--you .hand__slot[data-card-id="${card.id}"]`)
+    if (!felt || !slot || !canFan(card)) return
+    const others = matching(card).filter((c) => c.id !== card.id)
+    setFan({ cards: [card, ...others], anchor: feltPosition(felt, slot), touch })
+  }
+
+  const holdStart = (card: Card, pointerType: string) => {
+    clearTimeout(holdTimer.current)
+    if (!canFan(card)) return
+    const touch = pointerType !== 'mouse'
+    holdTimer.current = setTimeout(() => {
+      openFan(card, touch)
+      if (touch) ignoreClicksUntil.current = Date.now() + 700
+    }, touch ? TOUCH_HOLD : MOUSE_HOLD)
+  }
+  const holdCancel = () => clearTimeout(holdTimer.current)
+
+  const closeFan = useCallback(() => {
+    setFan((open) => {
+      // the tap that closes a fan shouldn't land on a card underneath
+      if (open) ignoreClicksUntil.current = Date.now() + 350
+      return null
+    })
+  }, [])
+
+  // a new turn or a new game closes the fan and any pending hold
+  useEffect(() => {
+    clearTimeout(holdTimer.current)
+    setFan(null)
+  }, [game.current, game.players[HUMAN].hand.length, dealt])
+
+  const playFanned = (count: number) => {
+    if (!fan) return
+    const [first, ...rest] = fan.cards
+    setFan(null)
+    attempt({ from: 'hand', cardId: first.id, with: rest.slice(0, count - 1).map((c) => c.id) }, true)
+  }
+
+  const attempt = (source: Source, fromFan = false) => {
     if (!humanTurn) return
+    if (!fromFan && Date.now() < ignoreClicksUntil.current) return
+    clearTimeout(holdTimer.current)
     const next = play(game, source)
     if (next.error) {
       setFlash(sourceKey(source))
@@ -316,7 +378,8 @@ export default function App() {
   const computer = game.players[1]
   const computerHand = useHiddenHandOrder(computer.hand, dealt, game, opponentEnds)
   // the card still flying onto the pile isn't on it yet
-  const visiblePile = game.pile.filter((c) => c.id !== flight?.card.id).slice(-4)
+  const flying = new Set(flight?.cards.map((f) => f.card.id))
+  const visiblePile = game.pile.filter((c) => !flying.has(c.id)).slice(-4)
   // the blown-up cards land on the discard once the explosion is over
   const discardShown = kaboom ? game.discard.slice(0, kaboom.before) : game.discard
 
@@ -436,6 +499,9 @@ export default function App() {
             active={humanTurn}
             reservedLocked={game.deck.length > 0}
             onPlay={humanTurn ? attempt : undefined}
+            onHoldStart={holdStart}
+            onHoldCancel={holdCancel}
+            onFanKey={(card) => openFan(card, false)}
             flash={flash}
             incoming={incomingFor(HUMAN, swoosh, drawing)}
           />
@@ -443,6 +509,9 @@ export default function App() {
           {swoosh && <Swoosh animation={swoosh} key={`swoosh-${swoosh.id}`} />}
           {drawing && <Deal animation={drawing} key={`deal-${drawing.id}`} />}
           {flight && <PlayFlight animation={flight} key={`play-${flight.id}`} />}
+          {fan && (
+            <MultiFan fan={fan} feltWidth={feltRef.current?.clientWidth ?? 600} onPlay={playFanned} onClose={closeFan} />
+          )}
 
           {celebrating && <WinCascade cards={[...game.discard, ...game.pile]} onDone={endCelebration} />}
         </main>
@@ -478,6 +547,11 @@ export default function App() {
             <b>Reserved cards</b> unlock once the deck is empty. Hidden cards unlock when the card on top is gone, and you
             don't know what they are until you play them. If a hidden card can't be played, you pick it up along with the
             pile, then play again.
+          </p>
+          <p>
+            <b>Playing several at once:</b> got more than one card of the same rank? Hover over one for a second (or press
+            and hold it on a touch screen) and they fan out, so you can play two, three or all of them together. They count
+            as one play.
           </p>
           <p>
             If you can't play, click the pile to pick it all up, then start the empty pile with any card. After each play
@@ -603,9 +677,25 @@ interface SeatProps {
   flash?: string | null
   // cards still flying into this hand, kept invisible until they land
   incoming?: Set<number>
+  // holding a card (hover with a mouse, press with a finger) to fan out its matches
+  onHoldStart?: (card: Card, pointerType: string) => void
+  onHoldCancel?: () => void
+  onFanKey?: (card: Card) => void
 }
 
-function Seat({ player, hand: cards = player.hand, active, opponent, reservedLocked, onPlay, flash, incoming }: SeatProps) {
+function Seat({
+  player,
+  hand: cards = player.hand,
+  active,
+  opponent,
+  reservedLocked,
+  onPlay,
+  flash,
+  incoming,
+  onHoldStart,
+  onHoldCancel,
+  onFanKey,
+}: SeatProps) {
   const hand = (
     <div className={`hand ${opponent ? 'hand--opponent' : ''}`} aria-label={`${player.name} hand`}>
       {cards.length === 0 && <EmptySpot />}
@@ -616,6 +706,19 @@ function Seat({ player, hand: cards = player.hand, active, opponent, reservedLoc
           className={`hand__slot ${incoming?.has(card.id) ? 'hand__slot--incoming' : ''}`}
           key={card.id}
           data-card-id={card.id}
+          // hover (mouse) or press and hold (touch) to fan out matching cards
+          onPointerEnter={(e) => e.pointerType === 'mouse' && onHoldStart?.(card, 'mouse')}
+          onPointerLeave={(e) => e.pointerType === 'mouse' && onHoldCancel?.()}
+          onPointerDown={(e) => e.pointerType !== 'mouse' && onHoldStart?.(card, e.pointerType)}
+          onPointerUp={(e) => e.pointerType !== 'mouse' && onHoldCancel?.()}
+          onPointerCancel={() => onHoldCancel?.()}
+          onContextMenu={(e) => onHoldStart && e.preventDefault()}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowUp' && onFanKey) {
+              e.preventDefault()
+              onFanKey(card)
+            }
+          }}
         >
           {opponent ? (
             <CardView faceDown />

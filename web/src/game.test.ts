@@ -141,6 +141,54 @@ describe('play', () => {
   })
 })
 
+describe('playing several cards of the same rank', () => {
+  it('plays them together, refills the hand and passes the turn', () => {
+    const g = withPile([onPile(4)])
+    const [a, b, c] = [card(7), card(7), card(7)]
+    g.players[0].hand = [a, b, c, card(12), card(13)]
+    const next = play(g, { from: 'hand', cardId: a.id, with: [b.id, c.id] })
+    expect(next.error).toBeNull()
+    expect(next.pile.slice(-3).map((p) => p.id)).toEqual([a.id, b.id, c.id])
+    expect(next.players[0].hand).toHaveLength(5)
+    expect(next.players[0].hand.some((h) => [a.id, b.id, c.id].includes(h.id))).toBe(false)
+    expect(next.lastPlay).toMatchObject({ card: a, extras: [b, c] })
+    expect(next.current).toBe(1)
+  })
+
+  it('treats a pair of 2s as one flip and a pair of 10s as one blow-up', () => {
+    const g = withPile([onPile(5)])
+    const [x, y] = [card(2), card(2)]
+    g.players[0].hand = [x, y]
+    expect(play(g, { from: 'hand', cardId: x.id, with: [y.id] }).goingUp).toBe(false)
+
+    const h = withPile([onPile(5)])
+    const [t, u] = [card(10), card(10)]
+    h.players[0].hand = [t, u, card(3)]
+    const next = play(h, { from: 'hand', cardId: t.id, with: [u.id] })
+    expect(next.pile).toEqual([])
+    expect(next.discard.map((d) => d.rank)).toEqual([5, 10, 10])
+    expect(next.current).toBe(0)
+  })
+
+  it('rejects cards of different ranks or cards not in the hand', () => {
+    const g = withPile([onPile(4)])
+    const [a, b] = [card(7), card(8)]
+    g.players[0].hand = [a, b]
+    expect(play(g, { from: 'hand', cardId: a.id, with: [b.id] }).error).toMatch(/same rank/)
+    expect(play(g, { from: 'hand', cardId: a.id, with: [99999] }).error).toBeTruthy()
+    expect(play(g, { from: 'hand', cardId: a.id, with: [a.id] }).error).toBeTruthy()
+  })
+
+  it('still needs the rank to be playable', () => {
+    const g = withPile([onPile(12)])
+    const [a, b] = [card(7), card(7)]
+    g.players[0].hand = [a, b]
+    const next = play(g, { from: 'hand', cardId: a.id, with: [b.id] })
+    expect(next.error).toBeTruthy()
+    expect(next.players[0].hand).toHaveLength(2)
+  })
+})
+
 describe('noMove', () => {
   it('picks up the whole pile, then plays again', () => {
     const g = withPile([onPile(4), onPile(9), onPile(13)])

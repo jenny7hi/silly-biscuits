@@ -198,33 +198,41 @@ export function Deal({ animation }: { animation: DealAnimation }) {
 
 export interface PlayFlightAnimation {
   id: number
-  card: Card
-  from: Point
-  to: Point
+  // one card, or several of the same rank played together
+  cards: { card: Card; from: Point; to: Point }[]
   // cards from the computer's hand or a hidden slot start face down and flip face up
   faceDown: boolean
 }
 
 export const PLAY_FLIGHT = 520
+// when several cards are played together, each leaves a moment after the one before
+export const PLAY_STAGGER = 90
 
-// a played card flips out of the hand and arcs onto the pile: one smooth move across, with
-// a separate rise and fall layered on top so the arc never stalls at its peak
+export const playFlightDuration = (cardCount: number) => PLAY_FLIGHT + (cardCount - 1) * PLAY_STAGGER
+
+// played cards flip out of the hand and arc onto the pile: one smooth move across, with a
+// separate rise and fall layered on top so the arc never stalls at its peak
 export function PlayFlight({ animation }: { animation: PlayFlightAnimation }) {
-  const { card, from, to, faceDown } = animation
-  const style = {
-    left: from.x,
-    top: from.y,
-    '--dx': `${to.x - from.x}px`,
-    '--dy': `${to.y - from.y}px`,
-    animation: `fly ${PLAY_FLIGHT}ms ${EASE} both`,
-  } as CSSProperties
+  const { cards, faceDown } = animation
   return (
     <div className="swoosh" aria-hidden="true">
-      <div className="flyer play__card" style={style}>
-        <div style={{ animation: `hop ${PLAY_FLIGHT}ms linear both` }}>
-          <RetroFlip card={card} from={faceDown ? 'back' : 'front'} to="front" duration={PLAY_FLIGHT} delay={0} />
-        </div>
-      </div>
+      {cards.map(({ card, from, to }, i) => {
+        const delay = i * PLAY_STAGGER
+        const style = {
+          left: from.x,
+          top: from.y,
+          '--dx': `${to.x - from.x}px`,
+          '--dy': `${to.y - from.y}px`,
+          animation: `fly ${PLAY_FLIGHT}ms ${EASE} ${delay}ms both`,
+        } as CSSProperties
+        return (
+          <div className="flyer play__card" style={style} key={card.id}>
+            <div style={{ animation: `hop ${PLAY_FLIGHT}ms linear ${delay}ms both` }}>
+              <RetroFlip card={card} from={faceDown ? 'back' : 'front'} to="front" duration={PLAY_FLIGHT} delay={delay} />
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

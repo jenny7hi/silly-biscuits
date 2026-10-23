@@ -11,8 +11,8 @@ const BURST_POINTS = Array.from({ length: 28 }, (_, i) => {
 
 // the explosion when a 10 blows up the pile: a starburst, 轰！ ("hōng", Chinese for
 // kaboom), and the pile's top cards flying apart. With a delay, the pile waits while the
-// 10 (`landing`) is still flying in, and that card only appears once it lands.
-export function Kaboom({ cards, delay = 0, landing }: { cards: PileCard[]; delay?: number; landing?: number }) {
+// 10s (`landing`) are still flying in, and those cards only appear once they land.
+export function Kaboom({ cards, delay = 0, landing = [] }: { cards: PileCard[]; delay?: number; landing?: number[] }) {
   return (
     <div className="kaboom" aria-hidden="true" style={{ '--kaboom-delay': `${delay}ms` } as CSSProperties}>
       {cards.map((card, i) => {
@@ -25,7 +25,7 @@ export function Kaboom({ cards, delay = 0, landing }: { cards: PileCard[]; delay
           '--rot': `${((card.id * 53) % 240) - 120}deg`,
         } as CSSProperties
         return (
-          <div className={`kaboom__shard ${card.id === landing ? 'kaboom__shard--landing' : ''}`} style={style} key={card.id}>
+          <div className={`kaboom__shard ${landing.includes(card.id) ? 'kaboom__shard--landing' : ''}`} style={style} key={card.id}>
             <CardView card={card} />
           </div>
         )
