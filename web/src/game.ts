@@ -29,10 +29,11 @@ export interface Player {
   slots: Slot[]
 }
 
+// `with` plays more cards of the same rank at the same time: card ids from the hand, or
+// face-up reserved cards once the deck is empty (and they're unlocked)
 export type Source =
-  // `with` plays more cards of the same rank from the hand at the same time
   | { from: 'hand'; cardId: number; with?: number[] }
-  | { from: 'public'; slot: number }
+  | { from: 'public'; slot: number; with?: number[] }
   | { from: 'hidden'; slot: number }
 
 // the last time someone had to pick up the pile, so the UI can animate it
@@ -275,21 +276,23 @@ export function play(state: GameState, source: Source): GameState {
     return s
   }
 
-  // any matching cards played alongside it, all from the hand
+  // any matching cards played alongside it: from the hand, or face-up reserved cards once
+  // they're unlocked. Hidden cards are always played one at a time.
   const extras: Card[] = []
-  if (source.from === 'hand' && source.with?.length) {
+  if (source.from !== 'hidden' && source.with?.length) {
+    const reserved = reservedLocked(s) ? [] : p.slots.flatMap((slot) => (slot.public ? [slot.public] : []))
     for (const id of source.with) {
-      const extra = p.hand.find((c) => c.id === id)
-      if (!extra || id === card.id || extras.includes(extra)) return { ...s, error: "You don't have those cards." }
+      const extra = p.hand.find((c) => c.id === id) ?? reserved.find((c) => c.id === id)
+      if (!extra || id === card.id || extras.includes(extra)) return { ...s, error: "You can't play those cards together." }
       if (extra.rank !== card.rank) return { ...s, error: 'Cards played together must all be the same rank.' }
       extras.push(extra)
     }
   }
   const played = [card, ...extras]
 
-  if (source.from === 'hand') p.hand = p.hand.filter((c) => !played.includes(c))
-  else if (source.from === 'public') p.slots[source.slot].public = null
-  else p.slots[source.slot].hidden = null
+  p.hand = p.hand.filter((c) => !played.includes(c))
+  for (const slot of p.slots) if (slot.public && played.includes(slot.public)) slot.public = null
+  if (source.from === 'hidden') p.slots[source.slot].hidden = null
 
   const value = card.rank === 1 ? (s.goingUp ? 14 : 1) : card.rank
   for (const c of played) s.pile.push({ ...c, value })

@@ -46,18 +46,22 @@ function options(state: GameState): Option[] {
 
 const pick = <T>(items: T[], rng: Rng) => items[Math.floor(rng() * items.length)]
 
-// the other cards of the same rank in the hand, for playing several together
+// the other cards of the same rank that could be played alongside this one: from the hand,
+// and once the deck is empty, face-up reserved cards (those first, since clearing them
+// opens up the hidden cards underneath)
 function copiesOf(state: GameState, source: Source): Card[] {
-  if (source.from !== 'hand') return []
-  const hand = state.players[state.current].hand
-  const card = hand.find((c) => c.id === source.cardId)!
-  return hand.filter((c) => c.rank === card.rank && c.id !== card.id)
+  if (source.from === 'hidden') return []
+  const p = state.players[state.current]
+  const card = source.from === 'hand' ? p.hand.find((c) => c.id === source.cardId)! : p.slots[source.slot].public!
+  const faceUp = state.deck.length > 0 ? [] : p.slots.flatMap((s) => (s.public ? [s.public] : []))
+  return [...faceUp, ...p.hand].filter((c) => c.rank === card.rank && c.id !== card.id)
 }
 
-// the same hand play, with `extra` more cards of its rank played alongside it
+// the same play, with `extra` more cards of its rank played alongside it
 function withCopies(state: GameState, source: Source, extra: number): Source {
-  if (source.from !== 'hand' || extra <= 0) return source
-  return { ...source, with: copiesOf(state, source).slice(0, extra).map((c) => c.id) }
+  if (source.from === 'hidden') return source
+  const copies = copiesOf(state, source).slice(0, Math.max(0, extra))
+  return copies.length ? { ...source, with: copies.map((c) => c.id) } : source
 }
 
 // Easy: any card that can be played, at random, along with a random number of its copies.
@@ -77,9 +81,10 @@ function easyMove(state: GameState, rng: Rng): Source | null {
 // copies, to empty the hand faster; specials and aces go one at a time, to save the rest.
 function mediumMove(state: GameState): Source | null {
   const chosen = mediumSingle(state)
-  if (!chosen || chosen.from !== 'hand') return chosen
-  const card = state.players[state.current].hand.find((c) => c.id === chosen.cardId)!
-  return isSpecial(card) || card.rank === 1 ? chosen : withCopies(state, chosen, 3)
+  if (!chosen || chosen.from === 'hidden') return chosen
+  const p = state.players[state.current]
+  const card = chosen.from === 'hand' ? p.hand.find((c) => c.id === chosen.cardId)! : p.slots[chosen.slot].public!
+  return isSpecial(card) || card.rank === 1 ? chosen : withCopies(state, chosen, 7)
 }
 
 function mediumSingle(state: GameState): Source | null {
@@ -165,7 +170,7 @@ function kind(state: GameState, source: Source): string {
   const p = state.players[state.current]
   if (source.from === 'hand') return `hand-${p.hand.find((c) => c.id === source.cardId)!.rank}x${1 + (source.with?.length ?? 0)}`
   const slot = p.slots[source.slot]
-  if (source.from === 'public') return `public-${slot.public!.rank}-${slot.hidden ? 'covering' : 'alone'}`
+  if (source.from === 'public') return `public-${slot.public!.rank}-${slot.hidden ? 'covering' : 'alone'}x${1 + (source.with?.length ?? 0)}`
   return 'hidden'
 }
 

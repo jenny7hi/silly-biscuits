@@ -75,7 +75,9 @@ const timeout = FULL ? 3_600_000 : 120_000
 describe('stronger levels beat weaker ones', () => {
   const pairings: [Matchup, number][] = [
     [{ a: 'medium', b: 'easy', deals: [150, 500], maxTurns: 10_000 }, 0.6],
-    [{ a: 'hard', b: 'medium', deals: [30, 200], maxTurns: 600 }, 0.65],
+    // 60 deals (120 games) in the short run: with fewer, chance alone could put a level that
+    // really wins about 73% of the time under the bar
+    [{ a: 'hard', b: 'medium', deals: [60, 200], maxTurns: 600 }, 0.65],
     [{ a: 'hard', b: 'easy', deals: [6, 100], maxTurns: 2000 }, 0.8],
   ]
   for (const [m, rate] of pairings) {
@@ -109,7 +111,9 @@ describe('neither seat has an edge when a level plays itself', () => {
         expect(r.firstWins / finished).toBeGreaterThan(0.35)
         expect(r.firstWins / finished).toBeLessThan(0.65)
       }
-      expect(r.unfinished / r.games).toBeLessThan(m.unfinished ?? 0.06)
+      // nor does a handful of games say much about how often they stall: one stall in the
+      // short Hard run's 8 games would be 12.5%, so only check that with enough games
+      if (r.games >= 50) expect(r.unfinished / r.games).toBeLessThan(m.unfinished ?? 0.06)
       expect(r.hiddenPlays).toBeGreaterThan(0)
     }, timeout)
   }
