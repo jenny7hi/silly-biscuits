@@ -179,6 +179,34 @@ describe('playing several cards of the same rank', () => {
     expect(play(g, { from: 'hand', cardId: a.id, with: [a.id] }).error).toBeTruthy()
   })
 
+  it('can include face-up reserved cards once the deck is empty', () => {
+    const g = withPile([onPile(4)])
+    g.deck = []
+    const [inHand, faceUp, alsoUp] = [card(7), card(7), card(7)]
+    g.players[0].hand = [inHand, card(12)]
+    g.players[0].slots[0] = { public: faceUp, hidden: card(3) }
+    g.players[0].slots[1] = { public: alsoUp, hidden: null }
+    const next = play(g, { from: 'hand', cardId: inHand.id, with: [faceUp.id, alsoUp.id] })
+    expect(next.error).toBeNull()
+    expect(next.pile.slice(-3).map((c) => c.id)).toEqual([inHand.id, faceUp.id, alsoUp.id])
+    expect(next.players[0].slots[0].public).toBeNull()
+    expect(next.players[0].slots[0].hidden).not.toBeNull()
+    expect(next.players[0].slots[1].public).toBeNull()
+
+    // starting from a face-up card works too
+    const fromSlot = play(g, { from: 'public', slot: 0, with: [inHand.id] })
+    expect(fromSlot.error).toBeNull()
+    expect(fromSlot.players[0].hand.map((c) => c.id)).not.toContain(inHand.id)
+  })
+
+  it("won't include face-up reserved cards while the deck still has cards", () => {
+    const g = withPile([onPile(4)])
+    const [inHand, faceUp] = [card(7), card(7)]
+    g.players[0].hand = [inHand]
+    g.players[0].slots[0] = { public: faceUp, hidden: card(3) }
+    expect(play(g, { from: 'hand', cardId: inHand.id, with: [faceUp.id] }).error).toBeTruthy()
+  })
+
   it('still needs the rank to be playable', () => {
     const g = withPile([onPile(12)])
     const [a, b] = [card(7), card(7)]

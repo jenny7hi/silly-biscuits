@@ -628,6 +628,13 @@ button.xp-button--close:hover {
   user-select: none;
 }
 
+/* every card that would be played together with the one being pointed at or held */
+.card--in-set {
+  outline: 2px solid #fff200;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 4px rgba(255, 242, 0, 0.3);
+}
+
 /* an XP tooltip-yellow balloon holding the matching cards and a button per count */
 .multi-fan {
   position: absolute;

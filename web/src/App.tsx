@@ -313,19 +313,35 @@ export default function App() {
   const MOUSE_HOLD = 1000
   const TOUCH_HOLD = 450
 
-  const matching = (card: Card) => game.players[HUMAN].hand.filter((c) => c.rank === card.rank)
-  const canFan = (card: Card) => humanTurn && matching(card).length > 1 && isLegal(game, card)
+  // the cards that would be played together with this one: it comes first, then any matching
+  // face-up reserved cards once they're unlocked (clearing those opens up the hidden cards),
+  // then matching cards from the hand
+  const setFor = (card: Card): Card[] => {
+    const me = game.players[HUMAN]
+    const faceUp = game.deck.length > 0 ? [] : me.slots.flatMap((s) => (s.public ? [s.public] : []))
+    const others = [...faceUp, ...me.hand].filter((c) => c.rank === card.rank && c.id !== card.id)
+    return [card, ...others]
+  }
+  const sourceOf = (card: Card): Exclude<Source, { from: 'hidden' }> => {
+    const slot = game.players[HUMAN].slots.findIndex((s) => s.public?.id === card.id)
+    return slot >= 0 ? { from: 'public', slot } : { from: 'hand', cardId: card.id }
+  }
+  const canFan = (card: Card) => humanTurn && setFor(card).length > 1 && isLegal(game, card)
+
+  // the card being pointed at or held, so its whole set can be highlighted
+  const [pointed, setPointed] = useState<Card | null>(null)
+  const inSet = pointed && canFan(pointed) ? new Set(setFor(pointed).map((c) => c.id)) : undefined
 
   const openFan = (card: Card, touch: boolean) => {
     const felt = feltRef.current
-    const slot = felt?.querySelector<HTMLElement>(`.seat--you .hand__slot[data-card-id="${card.id}"]`)
-    if (!felt || !slot || !canFan(card)) return
-    const others = matching(card).filter((c) => c.id !== card.id)
-    setFan({ cards: [card, ...others], anchor: feltPosition(felt, slot), touch })
+    const el = felt?.querySelector<HTMLElement>(`.seat--you [data-card-id="${card.id}"]`)
+    if (!felt || !el || !canFan(card)) return
+    setFan({ cards: setFor(card), anchor: feltPosition(felt, el), touch })
   }
 
   const holdStart = (card: Card, pointerType: string) => {
     clearTimeout(holdTimer.current)
+    setPointed(card)
     if (!canFan(card)) return
     const touch = pointerType !== 'mouse'
     holdTimer.current = setTimeout(() => {
@@ -333,7 +349,10 @@ export default function App() {
       if (touch) ignoreClicksUntil.current = Date.now() + 700
     }, touch ? TOUCH_HOLD : MOUSE_HOLD)
   }
-  const holdCancel = () => clearTimeout(holdTimer.current)
+  const holdCancel = () => {
+    clearTimeout(holdTimer.current)
+    setPointed(null)
+  }
 
   const closeFan = useCallback(() => {
     setFan((open) => {
@@ -347,13 +366,15 @@ export default function App() {
   useEffect(() => {
     clearTimeout(holdTimer.current)
     setFan(null)
+    setPointed(null)
   }, [game.current, game.players[HUMAN].hand.length, dealt])
 
   const playFanned = (count: number) => {
     if (!fan) return
     const [first, ...rest] = fan.cards
     setFan(null)
-    attempt({ from: 'hand', cardId: first.id, with: rest.slice(0, count - 1).map((c) => c.id) }, true)
+    setPointed(null)
+    attempt({ ...sourceOf(first), with: rest.slice(0, count - 1).map((c) => c.id) }, true)
   }
 
   const attempt = (source: Source, fromFan = false) => {
@@ -361,10 +382,15 @@ export default function App() {
     if (!fromFan && Date.now() < ignoreClicksUntil.current) return
     clearTimeout(holdTimer.current)
     // clicking a card you hold several of plays them all; the fan is for playing fewer
-    if (source.from === 'hand' && !fromFan && !source.with) {
-      const { cardId } = source
-      const card = game.players[HUMAN].hand.find((c) => c.id === cardId)
-      if (card) source = { ...source, with: matching(card).filter((c) => c.id !== card.id).map((c) => c.id) }
+    if (source.from !== 'hidden' && !fromFan && !source.with) {
+      const me = game.players[HUMAN]
+      const from = source.from
+      const id = source.from === 'hand' ? source.cardId : me.slots[source.slot].public?.id
+      const card = from === 'hand' ? me.hand.find((c) => c.id === id) : me.slots.find((s) => s.public?.id === id)?.public
+      // face-up cards only join in once they're unlocked
+      if (card && (from === 'hand' || game.deck.length === 0)) {
+        source = { ...source, with: setFor(card).slice(1).map((c) => c.id) }
+      }
     }
     const next = play(game, source)
     if (next.error) {
@@ -508,6 +534,7 @@ export default function App() {
             onHoldStart={holdStart}
             onHoldCancel={holdCancel}
             onFanKey={(card) => openFan(card, false)}
+            inSet={inSet}
             flash={flash}
             incoming={incomingFor(HUMAN, swoosh, drawing)}
           />
@@ -556,8 +583,9 @@ export default function App() {
           </p>
           <p>
             <b>Playing several at once:</b> clicking a card you hold more than one of plays all of them together, as one
-            play. To play fewer, hover over it for a second (or press and hold it on a touch screen) and pick how many from
-            the fan.
+            play. Once the deck is empty, matching face-up reserved cards join in too. Pointing at a card highlights the
+            whole set. To play fewer, hover over it for a second (or press and hold it on a touch screen) and pick how
+            many from the fan.
           </p>
           <p>
             If you can't play, click the pile to pick it all up, then start the empty pile with any card. After each play
@@ -687,6 +715,8 @@ interface SeatProps {
   onHoldStart?: (card: Card, pointerType: string) => void
   onHoldCancel?: () => void
   onFanKey?: (card: Card) => void
+  // the cards that would be played together with the one being pointed at
+  inSet?: Set<number>
 }
 
 function Seat({
@@ -701,7 +731,26 @@ function Seat({
   onHoldStart,
   onHoldCancel,
   onFanKey,
+  inSet,
 }: SeatProps) {
+  // hover (mouse) or press and hold (touch) a card to highlight its set and fan it out
+  const holdProps = (card: Card) =>
+    onHoldStart
+      ? {
+          onPointerEnter: (e: React.PointerEvent) => e.pointerType === 'mouse' && onHoldStart(card, 'mouse'),
+          onPointerLeave: (e: React.PointerEvent) => e.pointerType === 'mouse' && onHoldCancel?.(),
+          onPointerDown: (e: React.PointerEvent) => e.pointerType !== 'mouse' && onHoldStart(card, e.pointerType),
+          onPointerUp: (e: React.PointerEvent) => e.pointerType !== 'mouse' && onHoldCancel?.(),
+          onPointerCancel: () => onHoldCancel?.(),
+          onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+          onKeyDown: (e: React.KeyboardEvent) => {
+            if (e.key === 'ArrowUp' && onFanKey) {
+              e.preventDefault()
+              onFanKey(card)
+            }
+          },
+        }
+      : {}
   const hand = (
     <div className={`hand ${opponent ? 'hand--opponent' : ''}`} aria-label={`${player.name} hand`}>
       {cards.length === 0 && <EmptySpot />}
@@ -712,19 +761,7 @@ function Seat({
           className={`hand__slot ${incoming?.has(card.id) ? 'hand__slot--incoming' : ''}`}
           key={card.id}
           data-card-id={card.id}
-          // hover (mouse) or press and hold (touch) to fan out matching cards
-          onPointerEnter={(e) => e.pointerType === 'mouse' && onHoldStart?.(card, 'mouse')}
-          onPointerLeave={(e) => e.pointerType === 'mouse' && onHoldCancel?.()}
-          onPointerDown={(e) => e.pointerType !== 'mouse' && onHoldStart?.(card, e.pointerType)}
-          onPointerUp={(e) => e.pointerType !== 'mouse' && onHoldCancel?.()}
-          onPointerCancel={() => onHoldCancel?.()}
-          onContextMenu={(e) => onHoldStart && e.preventDefault()}
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowUp' && onFanKey) {
-              e.preventDefault()
-              onFanKey(card)
-            }
-          }}
+          {...holdProps(card)}
         >
           {opponent ? (
             <CardView faceDown />
@@ -734,6 +771,7 @@ function Seat({
               onClick={onPlay ? () => onPlay({ from: 'hand', cardId: card.id }) : undefined}
               label={`Play ${cardLabel(card)} from hand`}
               flash={flash === `hand-${card.id}`}
+              className={inSet?.has(card.id) ? 'card--in-set' : ''}
             />
           )}
         </div>
@@ -756,13 +794,17 @@ function Seat({
             !slot.public && <EmptySpot />
           )}
           {slot.public && (
-            <div className={`slot__public ${slot.hidden ? '' : 'slot__public--alone'}`} data-card-id={slot.public.id}>
+            <div
+              className={`slot__public ${slot.hidden ? '' : 'slot__public--alone'}`}
+              data-card-id={slot.public.id}
+              {...(reservedLocked ? {} : holdProps(slot.public))}
+            >
               <CardView
                 card={slot.public}
                 onClick={onPlay ? () => onPlay({ from: 'public', slot: i }) : undefined}
                 label={`Play ${cardLabel(slot.public)} from reserved`}
                 flash={flash === `public-${i}`}
-                className={reservedLocked ? 'card--locked' : ''}
+                className={reservedLocked ? 'card--locked' : inSet?.has(slot.public.id) ? 'card--in-set' : ''}
               />
             </div>
           )}
